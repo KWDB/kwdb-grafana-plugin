@@ -14,16 +14,8 @@ updates:
     # ESLint 10 is not supported by eslint-plugin-react yet (its peer range stops
     # at ESLint 9.x), so a major eslint bump fails lint. Revisit once
     # eslint-plugin-react supports ESLint 10; tracked in issue #29.
-    #
-    # @grafana/sign-plugin 4.x declares "node": ">=24.5.0" while the project and
-    # CI are pinned to Node 22 (.nvmrc, engines, workflows), so yarn refuses to
-    # install it and every job fails before running. Revisit together with a
-    # Node 24 toolchain migration.
     ignore:
       - dependency-name: 'eslint'
-        update-types:
-          - 'version-update:semver-major'
-      - dependency-name: '@grafana/sign-plugin'
         update-types:
           - 'version-update:semver-major'
     commit-message:
