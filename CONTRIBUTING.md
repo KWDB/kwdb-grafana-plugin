@@ -28,6 +28,7 @@ fix/short-description
 docs/short-description
 test/short-description
 chore/short-description
+ci/short-description
 ```
 
 Use short, imperative commit messages. Conventional Commit prefixes such as

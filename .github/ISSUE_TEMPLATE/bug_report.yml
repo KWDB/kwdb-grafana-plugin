@@ -33,7 +33,7 @@ body:
     attributes:
       label: Plugin version
       description: The plugin version shown in Grafana or in plugin.json.
-      placeholder: 'e.g. 1.3.0'
+      placeholder: 'e.g. 1.4.1'
     validations:
       required: true
   - type: dropdown

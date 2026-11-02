@@ -26,7 +26,7 @@ This plugin connects [Grafana](https://grafana.com) to KWDB. It executes read-on
 
 ## Requirements
 
-- Grafana 13.1 or newer (built and tested against 13.1.0)
+- Grafana 13.1 or newer (built with 13.2.4; E2E-tested on 13.1, 13.2, 13.3 and nightly)
 - KWDB with a PostgreSQL-compatible endpoint (default port `26257`)
 - A database account with read access; a dedicated read-only account is recommended
 
@@ -51,6 +51,8 @@ This plugin connects [Grafana](https://grafana.com) to KWDB. It executes read-on
 | Max rows        | Rows buffered per frame (default `100000`, `-1` disables). The query is cancelled once the cap is reached.                |
 | Max connections | Connection pool size (default `8`).                                                                                       |
 | Connect timeout | Connection timeout in seconds (default `5`).                                                                              |
+| Max lifetime    | Maximum lifetime of a pooled connection in seconds (default `3600`).                                                      |
+| Max idle time   | Seconds a connection may sit idle before it is closed (default `900`).                                                    |
 
 ![Data source settings](https://github.com/KWDB/kwdb-grafana-plugin/raw/main/src/img/kwdb-datasource.png)
 
@@ -96,12 +98,12 @@ LIMIT 100
 
 Available macros:
 
-| Macro                              | Expansion                                                   |
-| ---------------------------------- | ----------------------------------------------------------- |
-| `$__timeFilter(column)`            | `column >= '...'::TIMESTAMP AND column <= '...'::TIMESTAMP` |
-| `$__timeFrom`                      | Dashboard time range start as a timestamp literal           |
-| `$__timeTo`                        | Dashboard time range end as a timestamp literal             |
-| `$__timeGroup(column, 'interval')` | `time_bucket(column, 'interval')`                           |
+| Macro                              | Expansion                                                     |
+| ---------------------------------- | ------------------------------------------------------------- |
+| `$__timeFilter(column)`            | `(column >= '...'::TIMESTAMP AND column <= '...'::TIMESTAMP)` |
+| `$__timeFrom`                      | Dashboard time range start as a timestamp literal             |
+| `$__timeTo`                        | Dashboard time range end as a timestamp literal               |
+| `$__timeGroup(column, 'interval')` | `time_bucket(column, 'interval')`                             |
 
 ## Output formats
 

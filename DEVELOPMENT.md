@@ -84,8 +84,8 @@ Grafana on `http://localhost:3001`.
 
 ## Cross-platform backend binaries
 
-`mage -v build:backend` only produces Darwin binaries. Build the Linux binary
-that the Docker container loads:
+`mage -v build:backend` only builds a binary for the host platform (Darwin on a
+macOS checkout). Build the Linux binary that the Docker container loads:
 
 ```bash
 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build \

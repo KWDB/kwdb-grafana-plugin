@@ -36,11 +36,11 @@ protocol and renders results as Grafana time series or table data.
 - KWDB with a PostgreSQL-compatible endpoint (default port `26257`)
 - A database account with read access; prefer a dedicated read-only account
 
-| Component        | Requirement                                               |
-| ---------------- | --------------------------------------------------------- |
-| Grafana          | 13.1 or newer (built and tested against 13.1.0)           |
-| KWDB             | PostgreSQL-compatible endpoint, default port `26257`      |
-| Database account | Read access; a dedicated read-only account is recommended |
+| Component        | Requirement                                                                   |
+| ---------------- | ----------------------------------------------------------------------------- |
+| Grafana          | 13.1 or newer (built with 13.2.4; E2E-tested on 13.1, 13.2, 13.3 and nightly) |
+| KWDB             | PostgreSQL-compatible endpoint, default port `26257`                          |
+| Database account | Read access; a dedicated read-only account is recommended                     |
 
 ## Installation
 
@@ -113,6 +113,8 @@ KWDB_HOST=db.example.com KWDB_PORT=26257 KWDB_DATABASE=example_db \
 | Max rows        | Rows buffered per frame (default `100000`, `-1` disables). The query is cancelled once the cap is reached.                |
 | Max connections | Connection pool size (default `8`).                                                                                       |
 | Connect timeout | Connection timeout in seconds (default `5`).                                                                              |
+| Max lifetime    | Maximum lifetime of a pooled connection in seconds (default `3600`).                                                      |
+| Max idle time   | Seconds a connection may sit idle before it is closed (default `900`).                                                    |
 
 ### TLS/SSL
 
@@ -228,12 +230,12 @@ LIMIT 100
 
 ## Time macros
 
-| Macro                              | Expansion                                                   |
-| ---------------------------------- | ----------------------------------------------------------- |
-| `$__timeFilter(column)`            | `column >= '...'::TIMESTAMP AND column <= '...'::TIMESTAMP` |
-| `$__timeFrom`                      | Dashboard time range start as a timestamp literal           |
-| `$__timeTo`                        | Dashboard time range end as a timestamp literal             |
-| `$__timeGroup(column, 'interval')` | `time_bucket(column, 'interval')`                           |
+| Macro                              | Expansion                                                     |
+| ---------------------------------- | ------------------------------------------------------------- |
+| `$__timeFilter(column)`            | `(column >= '...'::TIMESTAMP AND column <= '...'::TIMESTAMP)` |
+| `$__timeFrom`                      | Dashboard time range start as a timestamp literal             |
+| `$__timeTo`                        | Dashboard time range end as a timestamp literal               |
+| `$__timeGroup(column, 'interval')` | `time_bucket(column, 'interval')`                             |
 
 Timestamp literals carry sub-second precision, but Grafana only provides
 millisecond dashboard ranges and KWDB's default `TIMESTAMP` precision is
@@ -243,10 +245,11 @@ available end to end; use a `TIMESTAMP(6)`/`TIMESTAMP(9)` column if you need it.
 ## Alerting and annotations
 
 The plugin declares Grafana Alerting and annotation support. Both use the same
-backend query pipeline and the same read-only guard rails. These paths are less
-exercised than dashboard queries: treat them as functional but not yet covered
-by the automated test suite, and prefer a read-only account when enabling
-alerting.
+backend query pipeline and the same read-only guard rails.
+
+Annotation queries are covered by the end-to-end suite. The alerting rule path
+is functional but not yet covered by an automated test, so prefer a read-only
+account when enabling alerting.
 
 ## Output formats
 
