@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/KWDB/kwdb-grafana-plugin/pkg/models"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/KWDB/kwdb-grafana-plugin/pkg/models"
 )
 
 // TestIsReadOnlyRejectsLexicalBypasses covers the escape sequences that made the
@@ -215,6 +215,135 @@ func TestTimeSeriesRejectsNullTimeValues(t *testing.T) {
 		rows: [][]any{{ts, 1.0}, {nil, 2.0}},
 	}
 	_, err := RowsToFrame(rows, "time_series", "ts", nil)
+	if err == nil || !strings.Contains(err.Error(), "NULL") {
+		t.Fatalf("err = %v, want an error about NULL time values", err)
+	}
+}
+
+func TestLatestTimeSeriesDropsAllNullAggregateRow(t *testing.T) {
+	// An ungrouped aggregate over zero input rows returns one row of NULLs.
+	// Latest Values must render that as "No data" instead of failing on the
+	// NULL time column (issue #83).
+	rows := &mockRows{
+		fields: []pgconn.FieldDescription{
+			{Name: "latest_temperature", DataTypeOID: 701},
+			{Name: "time", DataTypeOID: 1184},
+		},
+		rows: [][]any{{nil, nil}},
+	}
+	frames, err := RowsToFrames(rows, FrameOptions{
+		Format: "time_series", Mode: "latest", MaxRows: DefaultMaxRows,
+	})
+	if err != nil {
+		t.Fatalf("empty latest range returned an error: %v", err)
+	}
+	if len(frames) != 1 {
+		t.Fatalf("frame count = %d, want 1", len(frames))
+	}
+	if got := frames[0].Fields[0].Len(); got != 0 {
+		t.Fatalf("row count = %d, want 0 for an empty latest range", got)
+	}
+}
+
+func TestLatestTableDropsEmptyGroupedAggregateRows(t *testing.T) {
+	// KWDB's grouped aggregate keeps one row per tag for an empty range:
+	// the tag is populated while the metric and time are NULL.
+	rows := &mockRows{
+		fields: []pgconn.FieldDescription{
+			{Name: "device_id", DataTypeOID: 25},
+			{Name: "latest_temperature", DataTypeOID: 701},
+			{Name: "time", DataTypeOID: 1184},
+		},
+		rows: [][]any{
+			{"device-1", nil, nil},
+			{"device-2", nil, nil},
+		},
+	}
+	frames, err := RowsToFrames(rows, FrameOptions{
+		Format: "table", Mode: "latest", Tags: []string{"device_id"}, MaxRows: DefaultMaxRows,
+	})
+	if err != nil {
+		t.Fatalf("empty grouped latest range returned an error: %v", err)
+	}
+	if len(frames) != 1 || frames[0].Fields[0].Len() != 0 {
+		t.Fatalf("want one zero-row frame, got %d frames", len(frames))
+	}
+}
+
+func TestLatestTableDropsAllNullAggregateRow(t *testing.T) {
+	// Table format exposes the raw frame, so the same empty latest range would
+	// otherwise show one confusing row of NULLs instead of no rows.
+	rows := &mockRows{
+		fields: []pgconn.FieldDescription{
+			{Name: "latest_temperature", DataTypeOID: 701},
+			{Name: "time", DataTypeOID: 1184},
+		},
+		rows: [][]any{{nil, nil}},
+	}
+	frames, err := RowsToFrames(rows, FrameOptions{
+		Format: "table", Mode: "latest", MaxRows: DefaultMaxRows,
+	})
+	if err != nil {
+		t.Fatalf("empty latest range returned an error: %v", err)
+	}
+	if len(frames) != 1 || frames[0].Fields[0].Len() != 0 {
+		t.Fatalf("want one zero-row frame, got %d frames", len(frames))
+	}
+}
+
+func TestLatestTimeSeriesKeepsNullMetricWhenTimePresent(t *testing.T) {
+	// A range whose rows all have a NULL metric is not an empty range: the
+	// timestamp is real and the NULL value must stay in the series.
+	ts := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	rows := &mockRows{
+		fields: []pgconn.FieldDescription{
+			{Name: "latest_temperature", DataTypeOID: 701},
+			{Name: "time", DataTypeOID: 1184},
+		},
+		rows: [][]any{{nil, ts}},
+	}
+	frames, err := RowsToFrames(rows, FrameOptions{
+		Format: "time_series", Mode: "latest", MaxRows: DefaultMaxRows,
+	})
+	if err != nil {
+		t.Fatalf("a NULL metric with a real timestamp must not be treated as an empty range: %v", err)
+	}
+	if got := frames[0].Fields[0].Len(); got != 1 {
+		t.Fatalf("row count = %d, want 1 (the NULL metric is preserved)", got)
+	}
+}
+
+func TestLatestTimeSeriesKeepsNullTimeErrorWhenValuePresent(t *testing.T) {
+	// A NULL time next to a real metric is a data problem, not an empty range.
+	// Dropping it silently would hide rows that cannot be plotted.
+	rows := &mockRows{
+		fields: []pgconn.FieldDescription{
+			{Name: "latest_temperature", DataTypeOID: 701},
+			{Name: "time", DataTypeOID: 1184},
+		},
+		rows: [][]any{{21.5, nil}},
+	}
+	_, err := RowsToFrames(rows, FrameOptions{
+		Format: "time_series", Mode: "latest", MaxRows: DefaultMaxRows,
+	})
+	if err == nil || !strings.Contains(err.Error(), "NULL") {
+		t.Fatalf("err = %v, want an error about NULL time values", err)
+	}
+}
+
+func TestNonLatestTimeSeriesKeepsAllNullRowError(t *testing.T) {
+	// The empty-aggregate special case is limited to Latest Values. A raw
+	// query returning a NULL time is still reported so the user can fix it.
+	rows := &mockRows{
+		fields: []pgconn.FieldDescription{
+			{Name: "value", DataTypeOID: 701},
+			{Name: "time", DataTypeOID: 1184},
+		},
+		rows: [][]any{{nil, nil}},
+	}
+	_, err := RowsToFrames(rows, FrameOptions{
+		Format: "time_series", Mode: "raw", MaxRows: DefaultMaxRows,
+	})
 	if err == nil || !strings.Contains(err.Error(), "NULL") {
 		t.Fatalf("err = %v, want an error about NULL time values", err)
 	}

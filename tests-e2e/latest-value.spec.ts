@@ -109,6 +109,58 @@ test.describe('latest values query builder', () => {
     expect(rowCount(frames[0]), 'the first_row query returned no rows').toBeGreaterThan(0);
   });
 
+  test('an empty latest range renders no data instead of a plugin error', async ({
+    readProvisionedDataSource,
+    page,
+    panelEditPage,
+  }) => {
+    const ds = await readProvisionedDataSource({ fileName: 'datasources.yml' });
+    await skipIfTableUnavailable(page, ds.uid);
+
+    await panelEditPage.datasource.set(ds.name);
+    await panelEditPage.setVisualization('Table');
+    // 1990 predates every supported demo dataset, so the ungrouped aggregate below
+    // returns its single all-NULL row instead of a real latest value.
+    await setQueryTimeRange(panelEditPage, { from: '1990-01-01 00:00:00', to: '1990-01-02 00:00:00' });
+
+    await setMode(page, 'Latest Values');
+    await selectTable(page);
+    await selectTimeColumn(page);
+    await selectMetric(page);
+
+    const response = await panelEditPage.refreshPanel();
+    const frames = await expectQuerySucceeded(response);
+    expect(rowCount(frames[0]), 'an empty latest range must return zero rows').toBe(0);
+  });
+
+  test('an empty grouped latest range returns no frames instead of an error', async ({
+    readProvisionedDataSource,
+    page,
+    panelEditPage,
+  }) => {
+    const ds = await readProvisionedDataSource({ fileName: 'datasources.yml' });
+    await skipIfTableUnavailable(page, ds.uid);
+
+    await panelEditPage.datasource.set(ds.name);
+    await panelEditPage.setVisualization('Table');
+    // Grouping changes the database result shape: zero input rows produce zero
+    // grouped rows rather than the single all-NULL row covered above.
+    await setQueryTimeRange(panelEditPage, { from: '1990-01-01 00:00:00', to: '1990-01-02 00:00:00' });
+
+    await setMode(page, 'Latest Values');
+    await selectTable(page);
+    await selectTimeColumn(page);
+    await selectMetric(page);
+    await pickOption(page, 'Tags', new RegExp(`^${escapeRegExp(e2eConfig.tagColumn)}\\s*\\(tag\\)`));
+
+    const response = await panelEditPage.refreshPanel();
+    const frames = await expectQuerySucceeded(response);
+    expect(
+      frames.every((frame) => rowCount(frame) === 0),
+      'no group may carry data'
+    ).toBeTruthy();
+  });
+
   test('selecting a tag groups the latest value per tag', async ({
     readProvisionedDataSource,
     page,
