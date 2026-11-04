@@ -147,7 +147,9 @@ export async function expectSqlPreviewContains(page: Page, expected: string, mes
  * latest-function and tags pickers, the window parameters) do not need a private copy.
  */
 export async function pickOption(page: Page, comboboxName: string, optionName: string | RegExp): Promise<void> {
-  const combobox = page.getByRole('combobox', { name: comboboxName });
+  // Match the accessible name exactly: the editor also has an "Ad Hoc table"
+  // picker, and a loose match for "Table" would resolve to both comboboxes.
+  const combobox = page.getByRole('combobox', { name: comboboxName, exact: true });
   const option =
     typeof optionName === 'string'
       ? page.getByRole('option', { name: optionName, exact: true })
