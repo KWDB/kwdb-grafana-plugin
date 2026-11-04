@@ -264,9 +264,7 @@ describe('KwdbDataSource Ad Hoc filters', () => {
     // The backend decides per table whether each filter applies (issue #80),
     // so the frontend leaves the statement alone and carries the predicate.
     expect(result.rawSql).toBe('SELECT * FROM sensors');
-    expect(result.adHocFilters).toEqual([
-      { key: 'station_id', operator: '=', condition: `"station_id" = 'PV-A07'` },
-    ]);
+    expect(result.adHocFilters).toEqual([{ key: 'station_id', operator: '=', condition: `"station_id" = 'PV-A07'` }]);
   });
 
   it('leaves the query untouched when there are no filters', () => {
@@ -274,6 +272,22 @@ describe('KwdbDataSource Ad Hoc filters', () => {
     const query = rawQuery('SELECT * FROM sensors');
 
     expect(ds.applyTemplateVariables(query, {}, [])).toBe(query);
+  });
+
+  it('leaves an exempt target untouched instead of failing it', () => {
+    const ds = makeDataSource(makeTemplateSrv());
+    const query: KwdbQuery = {
+      ...rawQuery('SELECT s.station_id FROM a s JOIN b ON a.id = b.id'),
+      adHocExempt: true,
+    };
+
+    const result = ds.applyTemplateVariables(query, {}, filters);
+
+    // Exempt panels (joins, set operations, relational tables, subquery
+    // wrappers) must not fail every dashboard that has an active filter.
+    expect(result.adHocError).toBeUndefined();
+    expect(result.adHocFilters).toBeUndefined();
+    expect(result.rawSql).toBe(query.rawSql);
   });
 
   it('reports a Raw SQL statement it cannot filter instead of running it unfiltered', () => {
@@ -309,11 +323,9 @@ describe('KwdbDataSource Ad Hoc filters', () => {
   it('expands dashboard variables inside filter values', () => {
     const ds = makeDataSource(makeTemplateSrv());
 
-    const result = ds.applyTemplateVariables(
-      rawQuery('SELECT * FROM sensors'),
-      { station: { value: 'PV-A07' } },
-      [{ key: 'station_id', operator: '=', value: '$station' }]
-    );
+    const result = ds.applyTemplateVariables(rawQuery('SELECT * FROM sensors'), { station: { value: 'PV-A07' } }, [
+      { key: 'station_id', operator: '=', value: '$station' },
+    ]);
 
     expect(result.adHocFilters?.[0]?.condition).toBe(`"station_id" = 'PV-A07'`);
   });

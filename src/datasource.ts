@@ -159,12 +159,25 @@ export class KwdbDataSource extends DataSourceWithBackend<KwdbQuery, KwdbDataSou
     // only the ones its table actually declares (issue #80).
     const rendered = renderAdHocFilters(filters, scopedVars, this.templateSrv);
 
+    // A target marked exempt cannot carry a filter at all (joins, set
+    // operations, relational tables without tag columns). It is left untouched
+    // rather than erroring on every dashboard that has an active filter.
+    if (query.adHocExempt) {
+      if (interpolated === sql) {
+        return query;
+      }
+      return { ...query, rawSql: interpolated, adHocFilters: undefined };
+    }
+
     // Raw SQL is still checked here: a statement the backend cannot safely
     // rewrite has to be reported, and only the frontend knows the shape it
     // produced.
     if (!isBuilder || !query.table) {
       if (rendered.length > 0) {
-        const support = adHocFilterSupport(interpolated, rendered.map((filter) => filter.condition));
+        const support = adHocFilterSupport(
+          interpolated,
+          rendered.map((filter) => filter.condition)
+        );
         if (!support.supported) {
           // An exception thrown during interpolation only reaches the browser
           // console and leaves the panel empty, so the reason is carried on the

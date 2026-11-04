@@ -36,6 +36,11 @@ export interface KwdbQuery extends DataQuery {
   // targets default to `table`. Scenes dashboards may also pass their panel
   // targets, in which case those take precedence.
   adHocTable?: string;
+  // Opts this target out of dashboard Ad Hoc filtering. Set on panels whose
+  // statement cannot carry a filter (joins, set operations, relational tables
+  // without tag columns) so an active dashboard filter leaves them untouched
+  // instead of failing them.
+  adHocExempt?: boolean;
   // Dashboard Ad Hoc filters for this target. Grafana passes one request-level
   // filter list to every target, so the frontend attaches it here and the
   // backend applies only the filters whose column this target's table declares
