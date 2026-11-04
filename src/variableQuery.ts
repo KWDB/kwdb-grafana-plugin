@@ -109,8 +109,16 @@ export function parseVariableQuery(query: unknown): KwdbVariableQuery {
         return { queryType: 'columns', table };
       }
       case 'tagValues': {
-        const table = requireString(parsed.table, 'table', 'Variable query "tagValues" requires a table and a tag column');
-        const column = requireString(parsed.column, 'tag column', 'Variable query "tagValues" requires a table and a tag column');
+        const table = requireString(
+          parsed.table,
+          'table',
+          'Variable query "tagValues" requires a table and a tag column'
+        );
+        const column = requireString(
+          parsed.column,
+          'tag column',
+          'Variable query "tagValues" requires a table and a tag column'
+        );
         assertSupportedArgument(table, 'table');
         assertSupportedArgument(column, 'tag column');
         return { queryType: 'tagValues', table, column };

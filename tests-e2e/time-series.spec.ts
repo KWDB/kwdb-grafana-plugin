@@ -43,6 +43,9 @@ test('raw SQL time_series format returns a wide frame with tag labels', async ({
   const labelled = labelledFields(frame);
   expect(labelled.length, `expected series labelled by ${e2eConfig.tagColumn}`).toBeGreaterThan(0);
   for (const field of labelled) {
-    expect(field.labels?.[e2eConfig.tagColumn], `series ${field.name} has no ${e2eConfig.tagColumn} label`).toBeTruthy();
+    expect(
+      field.labels?.[e2eConfig.tagColumn],
+      `series ${field.name} has no ${e2eConfig.tagColumn} label`
+    ).toBeTruthy();
   }
 });

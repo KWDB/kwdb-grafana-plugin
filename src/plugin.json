@@ -16,13 +16,7 @@
       "name": "KWDB",
       "url": "https://www.kaiwudb.com/community"
     },
-    "keywords": [
-      "datasource",
-      "time series",
-      "TSDB",
-      "SQL",
-      "KWDB"
-    ],
+    "keywords": ["datasource", "time series", "TSDB", "SQL", "KWDB"],
     "logos": {
       "small": "img/logo.svg",
       "large": "img/logo.svg"

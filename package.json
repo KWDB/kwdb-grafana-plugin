@@ -8,7 +8,9 @@
     "test:ci": "jest --passWithNoTests --maxWorkers 4",
     "typecheck": "tsc --noEmit",
     "lint": "eslint --cache .",
-    "lint:fix": "npm run lint -- --fix && prettier --write --list-different .",
+    "lint:fix": "npm run lint -- --fix && npm run format",
+    "format": "prettier --write --list-different .",
+    "format:check": "prettier --check .",
     "e2e": "playwright test",
     "server": "docker compose up --build",
     "sign": "sign-plugin"

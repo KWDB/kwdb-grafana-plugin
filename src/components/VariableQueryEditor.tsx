@@ -109,10 +109,7 @@ export function VariableQueryEditor({ query, datasource, onChange }: Props) {
 
   // Only tag columns can provide distinct values for tag_values(table, column).
   const tagOptions = useMemo(
-    () =>
-      columns.items
-        .filter((column) => column.isTag)
-        .map((column) => ({ label: column.name, value: column.name })),
+    () => columns.items.filter((column) => column.isTag).map((column) => ({ label: column.name, value: column.name })),
     [columns.items]
   );
 
