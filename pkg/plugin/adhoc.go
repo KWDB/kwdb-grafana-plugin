@@ -136,7 +136,7 @@ func injectAdHocConditions(sql string, conditions []string) (string, error) {
 	where, ok := findTopLevelWhere(statement)
 	if !ok {
 		return "", fmt.Errorf(
-			"Ad Hoc filters cannot be applied to this Raw SQL statement: it must read from a single table without joins or set operations",
+			"cannot apply Ad Hoc filters to this Raw SQL statement: it must read from a single table without joins or set operations",
 		)
 	}
 	return where.insert(statement, conditions), nil
