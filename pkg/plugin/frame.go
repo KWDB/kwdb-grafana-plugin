@@ -80,6 +80,7 @@ func RowsToFrames(rows pgx.Rows, opts FrameOptions) ([]*data.Frame, error) {
 	if truncated && opts.OnTruncate != nil {
 		opts.OnTruncate()
 	}
+	plans = dropEmptyLatestAggregateRows(plans, opts)
 
 	if opts.Format == "time_series" {
 		frame, err := timeSeriesFrame(plans, opts.TimeColumn, opts.Tags)
@@ -192,6 +193,65 @@ func applyMaxRowsNotice(frame *data.Frame, maxRows int) {
 		Severity: data.NoticeSeverityWarning,
 		Text:     fmt.Sprintf("Query result was truncated at %d rows read; add LIMIT or narrow the time range to see all data", maxRows),
 	})
+}
+
+// dropEmptyLatestAggregateRows removes the NULL-time rows KWDB returns for a
+// Latest Values query whose time range contains no rows.
+//
+// KWDB keeps aggregate rows for an empty input even when GROUP BY is applied:
+// without tags it returns one row with every column NULL, and with tags it
+// returns one row per tag where only the tag columns are non-NULL. Passing any
+// of those rows to the time-series conversion fails with
+// `time column "time" contains NULL values` and the panel shows a plugin error
+// where it should show "No data" (issue #83).
+//
+// A row is only dropped when its time is NULL and every non-tag field is NULL
+// as well. A NULL time next to a real value is a genuine data problem and keeps
+// its error; a real time with a NULL metric is a valid data point and is kept.
+func dropEmptyLatestAggregateRows(plans []columnPlan, opts FrameOptions) []columnPlan {
+	if opts.Mode != "latest" || len(plans) == 0 {
+		return plans
+	}
+	timeIdx, err := findTimeColumn(plans, opts.TimeColumn)
+	if err != nil {
+		return plans
+	}
+
+	tagIdx := make(map[int]bool, len(opts.Tags))
+	for _, tag := range opts.Tags {
+		if idx := findColumnFold(plans, tag); idx >= 0 {
+			tagIdx[idx] = true
+		}
+	}
+
+	keep := make([]int, 0, len(plans[timeIdx].values))
+	for row, value := range plans[timeIdx].values {
+		if value == nil && latestRowHasNoValues(plans, row, timeIdx, tagIdx) {
+			continue
+		}
+		keep = append(keep, row)
+	}
+	if len(keep) == len(plans[timeIdx].values) {
+		return plans
+	}
+	for i := range plans {
+		plans[i].values = pickRows(plans[i].values, keep)
+	}
+	return plans
+}
+
+// latestRowHasNoValues reports whether every non-time, non-tag column is NULL
+// on one row.
+func latestRowHasNoValues(plans []columnPlan, row, timeIdx int, tagIdx map[int]bool) bool {
+	for i, plan := range plans {
+		if i == timeIdx || tagIdx[i] {
+			continue
+		}
+		if plan.values[row] != nil {
+			return false
+		}
+	}
+	return true
 }
 
 // tagRef pairs a resolved column index with its tag name.
