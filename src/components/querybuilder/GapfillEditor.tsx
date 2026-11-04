@@ -87,7 +87,11 @@ export function GapfillEditor({ datasource, query, onChange }: Props) {
           onChange={(timeColumn) => updateQuery({ timeColumn })}
         />
       </InlineField>
-      <InlineField label="Interval" labelWidth={12}>
+      <InlineField
+        label="Interval"
+        labelWidth={12}
+        tooltip="Bucket size for time_bucket(). Fixed: a literal such as 15m. Variable: Auto ($__interval) adapts to each panel, while a dashboard variable such as ${interval} controls every panel from one place."
+      >
         <IntervalPicker value={query.interval ?? '5m'} onChange={(interval) => updateQuery({ interval })} />
       </InlineField>
       <InlineField label="Interpolation" labelWidth={12}>

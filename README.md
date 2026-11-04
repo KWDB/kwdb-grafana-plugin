@@ -159,6 +159,26 @@ more metrics.
 
 Aggregations: `avg`, `sum`, `count`, `min`, `max`, `stddev`, `none`.
 
+The **Interval** control has two modes. **Fixed** takes a literal such as `15m`.
+**Variable** opens a picker listing `Auto` plus every variable on the current
+dashboard (`${interval}`, `${bucket}`, ...), so a single dashboard control drives
+the bucket size of every builder panel instead of editing each query. The
+selected token is expanded before the SQL reaches KWDB.
+
+The picker labels are descriptive, but they stand for real Grafana tokens:
+
+| Label      | Token            | Meaning                                                                                               |
+| ---------- | ---------------- | ----------------------------------------------------------------------------------------------------- |
+| `Auto`     | `$__interval`    | Computed per panel from its width and the time range, so it changes as you resize or zoom.            |
+| `Auto, ms` | `$__interval_ms` | The same value in milliseconds.                                                                       |
+| `${name}`  | `${name}`        | A dashboard variable: one value for every panel, chosen from the control at the top of the dashboard. |
+
+`Auto` is the better default when panels have different sizes, because a fixed
+bucket can look empty after zooming in. A dashboard variable is better when
+several panels must aggregate at the same granularity to be comparable.
+
+Both work in Query Builder modes and in Raw SQL.
+
 ![downsampling example](https://github.com/KWDB/kwdb-grafana-plugin/raw/main/src/img/downsampling-example.png)
 
 ### Gapfill
@@ -331,12 +351,13 @@ rather than silently using only the first. The multi-value forms `=|` and `!=|`
 are only offered by Scenes-based dashboards; the classic picker lists the
 single-value operators only.
 
-Set **Ad Hoc table** in the query editor so the key and value pickers can read
-that table's tag columns; it is required for Raw SQL targets, whose statement
-does not name exactly one table. Query Builder targets default to their
-selected table. The picker only reads tables that declare the selected key, but
-that is a picker concern: it does not make query filtering per-table. Without
-any table, Raw SQL filters can still be typed manually.
+**Raw SQL** targets can set **Ad Hoc table** so the key and value pickers know
+which table to read the tag columns from; a Raw SQL statement does not name one
+table unambiguously. The field only appears in Raw SQL mode: Query Builder
+targets already name their table and fall back to it automatically. It does not
+change the query itself, only what the picker offers and which table the backend
+checks before applying a filter. Without it, Raw SQL filters can still be typed
+manually.
 
 ### Mixed-table dashboards
 

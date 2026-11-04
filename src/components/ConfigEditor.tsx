@@ -155,10 +155,15 @@ export function ConfigEditor(props: Props) {
           onChange={onPasswordChange}
         />
       </InlineField>
+      {/*
+        Pool and timeout settings. Every field in a row uses the same labelWidth
+        so the two columns line up; mixing 16 and 18 pushed the right column's
+        input out of line and made long labels wrap.
+      */}
       <InlineFieldRow>
         <InlineField
           label="Max connections"
-          labelWidth={16}
+          labelWidth={21}
           tooltip="Maximum number of database connections in the pool (default: 8)"
         >
           <Input
@@ -170,11 +175,7 @@ export function ConfigEditor(props: Props) {
             width={12}
           />
         </InlineField>
-        <InlineField
-          label="Connect timeout (s)"
-          labelWidth={18}
-          tooltip="Connection timeout in seconds (default: 5)"
-        >
+        <InlineField label="Connect timeout (s)" labelWidth={21} tooltip="Connection timeout in seconds (default: 5)">
           <Input
             id="config-editor-connect-timeout"
             type="number"
@@ -188,7 +189,7 @@ export function ConfigEditor(props: Props) {
       <InlineFieldRow>
         <InlineField
           label="Query timeout (s)"
-          labelWidth={16}
+          labelWidth={21}
           tooltip="Per-statement timeout in seconds, enforced as statement_timeout and a query deadline (default: 30, -1 disables)"
         >
           <Input
@@ -202,7 +203,7 @@ export function ConfigEditor(props: Props) {
         </InlineField>
         <InlineField
           label="Max rows"
-          labelWidth={18}
+          labelWidth={21}
           tooltip="Rows buffered per frame before the query is cancelled (default: 100000, -1 disables)"
         >
           <Input
@@ -218,7 +219,7 @@ export function ConfigEditor(props: Props) {
       <InlineFieldRow>
         <InlineField
           label="Max lifetime (s)"
-          labelWidth={16}
+          labelWidth={21}
           tooltip="Maximum connection lifetime in seconds (default: 3600)"
         >
           <Input
@@ -230,11 +231,7 @@ export function ConfigEditor(props: Props) {
             width={12}
           />
         </InlineField>
-        <InlineField
-          label="Max idle time (s)"
-          labelWidth={18}
-          tooltip="Maximum idle time in seconds (default: 900)"
-        >
+        <InlineField label="Max idle time (s)" labelWidth={21} tooltip="Maximum idle time in seconds (default: 900)">
           <Input
             id="config-editor-max-conn-idle-time"
             type="number"
