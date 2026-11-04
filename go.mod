@@ -4,7 +4,7 @@ go 1.26.10
 
 require github.com/grafana/grafana-plugin-sdk-go v0.298.0
 
-require github.com/jackc/pgx/v5 v5.11.0
+require github.com/jackc/pgx/v5 v5.12.0
 
 require (
 	github.com/BurntSushi/toml v1.6.0 // indirect
@@ -36,7 +36,7 @@ require (
 	github.com/hashicorp/yamux v0.1.2 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	github.com/jackc/puddle/v2 v2.2.3 // indirect
 	github.com/jaegertracing/jaeger-idl v0.14.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.20.1 // indirect
