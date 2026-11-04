@@ -13,6 +13,14 @@ import type { ScopedVars, TypedVariableModel, VariableWithMultiSupport } from '@
  *   themselves without breaking the list;
  * - a number is emitted as-is, so a numeric filter stays numeric.
  *
+ * A custom `allValue` is a raw SQL expression configured by the user (`*`,
+ * `PV-%`, `now() - 1h`). Grafana passes it here as a plain string, and this
+ * formatter returns it unquoted, because quoting would turn `*` into the
+ * literal `'*'` and silently match nothing. The surrounding SQL decides whether
+ * that expression is valid: `col LIKE '$var'`, `col ~ '$var'` and
+ * `col IN ($var)` accept it, while `col = '$var'` does not. This mirrors the
+ * SQL data sources Grafana ships with and is documented in the README.
+ *
  * Quoting a literal uses doubling (`it's` -> `'it''s'`), which is valid for any
  * `standard_conforming_strings` setting, instead of a backslash escape.
  */
@@ -21,19 +29,13 @@ export function formatSqlInterpolation(
   variable: VariableWithMultiSupport | TypedVariableModel
 ): string {
   if (typeof value === 'string') {
-    // Grafana resolves All to the variable's option values before invoking a
-    // custom formatter. Some callers also pass the configured custom allValue;
-    // preserve that expression instead of turning it into `'*'`.
-    if (
-      'allValue' in variable &&
-      variable.allValue &&
-      ['$__all', '__all__', 'All'].includes(String(variable.current?.value))
-    ) {
-      return variable.allValue;
-    }
-    if ('multi' in variable && (variable.multi || variable.includeAll)) {
-      return quoteSqlLiteral(value);
-    }
+    // A variable with `multi`/`includeAll` is normally resolved by Grafana to
+    // the option array before this formatter runs, and the array branch below
+    // emits the quoted list. The string branch is then only reached when the
+    // array holds a single value, or when a caller passes a scoped variable
+    // (`$__interval`, repeat variables) whose value was already flattened to a
+    // string; quoting it would turn `time_bucket(ts, '1h')` into
+    // `time_bucket(ts, ''1h'')`, so it is escaped like any other single string.
     return value.replace(/'/g, "''");
   }
 

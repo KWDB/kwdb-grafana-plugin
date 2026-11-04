@@ -34,6 +34,20 @@ type Datasource struct {
 	queryTimeout time.Duration
 	// maxRows caps the rows buffered per frame; zero disables the cap.
 	maxRows int
+	// database is qualified names are resolved against when reading table
+	// metadata for per-target Ad Hoc filtering.
+	database string
+	// columns reads a table's declared columns. Nil uses the pool; tests
+	// substitute a fake catalog.
+	columns columnInfoFunc
+}
+
+// tableColumns reads the declared columns of `table`.
+func (d *Datasource) tableColumns(ctx context.Context, table string) ([]ColumnInfo, error) {
+	if d.columns != nil {
+		return d.columns(ctx, table)
+	}
+	return loadTableColumns(ctx, d.pool, d.database, table)
 }
 
 // resolveFormat returns the effective output format for a query. Builder
@@ -68,7 +82,33 @@ func (d *Datasource) query(ctx context.Context, query backend.DataQuery) backend
 			"query is empty: select a table, time column and at least one metric, or write a statement in Raw SQL mode")
 	}
 
+	// The frontend sets this when dashboard Ad Hoc filters cannot be applied to
+	// the statement (joins, set operations, SHOW/EXPLAIN). Reporting it as a
+	// query error keeps the panel from showing unfiltered rows as if they
+	// matched the filter.
+	if qm.AdHocError != "" {
+		return backend.ErrDataResponseWithSource(backend.StatusBadRequest, backend.ErrorSourcePlugin, qm.AdHocError)
+	}
+
 	sql := ExpandMacros(qm.RawSql, query.TimeRange)
+
+	// Apply only the dashboard Ad Hoc filters whose column this target's table
+	// actually declares. Grafana hands one filter list to every target in a
+	// request, so a dashboard mixing tables used to inject a filter about
+	// column A into a target reading table B and fail with "column does not
+	// exist" (issue #80). A target whose table lacks the column is left
+	// untouched instead.
+	conditions, applicable, err := d.applicableFilters(ctx, qm, newTableTagChecker(d.tableColumns))
+	if err != nil {
+		return backend.ErrDataResponseWithSource(backend.StatusBadRequest, backend.ErrorSourcePlugin, err.Error())
+	}
+	if applicable && len(conditions) > 0 {
+		sql, err = injectAdHocConditions(sql, conditions)
+		if err != nil {
+			return backend.ErrDataResponseWithSource(backend.StatusBadRequest, backend.ErrorSourcePlugin, err.Error())
+		}
+	}
+
 	if reason := ReadOnlyViolation(sql); reason != "" {
 		return backend.ErrDataResponseWithSource(backend.StatusBadRequest, backend.ErrorSourcePlugin, reason)
 	}

@@ -4,20 +4,31 @@ import type { TemplateSrv } from '@grafana/runtime';
 import { KwdbDataSource } from './datasource';
 import type { KwdbDataSourceOptions, KwdbQuery } from './types';
 
-function makeTemplateSrv(): TemplateSrv & { replace: jest.Mock; containsTemplate: jest.Mock } {
+type VariableValues = Record<string, string | string[]>;
+
+function makeTemplateSrv(
+  variables: VariableValues = {}
+): TemplateSrv & { replace: jest.Mock; containsTemplate: jest.Mock } {
   const replace = jest.fn((target: string, scopedVars: ScopedVars, format?: string | Function) => {
-    // Minimal stand-in for the real service: resolve single-value variables and
-    // apply the custom SQL formatter when one is supplied.
+    // Minimal stand-in for the real service: resolve variables from scopedVars
+    // first, then from the configured dashboard variables, and apply the custom
+    // SQL formatter when one is supplied. Multi-value variables resolve to the
+    // glob form `{a,b}` when no formatter is given, as Grafana does.
     return target.replace(/\$\{?(\w+)\}?/g, (match: string, name: string) => {
       const scopedVar = scopedVars?.[name];
-      if (!scopedVar) {
+      const configured = variables[name];
+      const raw = scopedVar?.value ?? configured;
+      if (raw === undefined) {
         return match;
       }
-      const value = scopedVar.value as string | string[] | number;
+      const value = raw as string | string[] | number;
       if (typeof format === 'function') {
         return String(format(value, { multi: false, includeAll: false }));
       }
-      return typeof value === 'string' ? value : String(value);
+      if (Array.isArray(value)) {
+        return `{${value.join(',')}}`;
+      }
+      return String(value);
     });
   });
   const containsTemplate = jest.fn((target: string) => /\$\w+|\$\{\w+\}/.test(target ?? ''));
@@ -217,15 +228,16 @@ describe('KwdbDataSource builder interpolation', () => {
     expect(result.rawSql).toContain(`time_bucket("ts", '1m')`);
   });
 
-  it('renders Ad Hoc conditions after interpolation, without double escaping', () => {
+  it('renders filter values after interpolation without double escaping', () => {
     const ds = makeDataSource(makeTemplateSrv());
     const result = ds.applyTemplateVariables(builder(), { bucket: { value: '5m' }, station: { value: 'PV-A07' } }, [
       { key: 'station_id', operator: '=', value: '$station' },
     ]);
 
     expect(result.rawSql).toContain(`time_bucket("ts", '5m')`);
-    expect(result.rawSql).toContain(`"station_id" = 'PV-A07'`);
-    expect(result.rawSql).not.toContain(`''PV-A07''`);
+    // The predicate travels on the query for the backend to apply per table.
+    expect(result.adHocFilters?.[0]?.condition).toBe(`"station_id" = 'PV-A07'`);
+    expect(result.adHocFilters?.[0]?.condition).not.toContain(`''PV-A07''`);
   });
 
   it('interpolates a persisted builder statement when the table is incomplete', () => {
@@ -242,19 +254,41 @@ describe('KwdbDataSource builder interpolation', () => {
 });
 
 describe('KwdbDataSource Ad Hoc filters', () => {
-  it('applies a Raw SQL filter in a documented subquery fallback', () => {
+  const filters = [{ key: 'station_id', operator: '=', value: 'PV-A07' }];
+
+  it('attaches rendered filters to the target instead of injecting SQL', () => {
     const ds = makeDataSource(makeTemplateSrv());
-    const filters = [{ key: 'station_id', operator: '=', value: 'PV-A07' }];
 
     const result = ds.applyTemplateVariables(rawQuery('SELECT * FROM sensors'), {}, filters);
 
-    expect(result.rawSql).toContain('FROM (\nSELECT * FROM sensors\n) AS adhoc_filters');
-    expect(result.rawSql).toContain(`WHERE "station_id" = 'PV-A07'`);
+    // The backend decides per table whether each filter applies (issue #80),
+    // so the frontend leaves the statement alone and carries the predicate.
+    expect(result.rawSql).toBe('SELECT * FROM sensors');
+    expect(result.adHocFilters).toEqual([
+      { key: 'station_id', operator: '=', condition: `"station_id" = 'PV-A07'` },
+    ]);
   });
 
-  it('filters builder rows before aggregation and LIMIT', () => {
+  it('leaves the query untouched when there are no filters', () => {
     const ds = makeDataSource(makeTemplateSrv());
-    const filters = [{ key: 'station_id', operator: '=', value: 'PV-A07' }];
+    const query = rawQuery('SELECT * FROM sensors');
+
+    expect(ds.applyTemplateVariables(query, {}, [])).toBe(query);
+  });
+
+  it('reports a Raw SQL statement it cannot filter instead of running it unfiltered', () => {
+    const ds = makeDataSource(makeTemplateSrv());
+
+    const result = ds.applyTemplateVariables(rawQuery('SELECT * FROM a JOIN b ON a.id = b.id'), {}, filters);
+
+    // The reason is carried on the query so the backend reports it as a panel
+    // error; throwing would only log to the browser console.
+    expect(result.adHocError).toMatch(/joins tables/);
+    expect(result.rawSql).toBe('SELECT * FROM a JOIN b ON a.id = b.id');
+  });
+
+  it('attaches builder filters without touching the generated SQL', () => {
+    const ds = makeDataSource(makeTemplateSrv());
     const query: KwdbQuery = {
       refId: 'A',
       mode: 'downsampling',
@@ -267,43 +301,44 @@ describe('KwdbDataSource Ad Hoc filters', () => {
 
     const result = ds.applyTemplateVariables(query, {}, filters);
 
-    const sql = result.rawSql ?? '';
-    const sourceWhere = sql.indexOf(`"station_id" = 'PV-A07'`);
-    const groupBy = sql.indexOf('GROUP BY');
-    expect(sourceWhere).toBeGreaterThan(-1);
-    expect(sourceWhere).toBeLessThan(groupBy);
-    expect(sql).not.toContain('adhoc_filters');
-  });
-
-  it('filters builder rows even when the filter tag is not selected', () => {
-    const ds = makeDataSource(makeTemplateSrv());
-    const filters = [{ key: 'station_id', operator: '=', value: 'PV-A07' }];
-    const query: KwdbQuery = {
-      refId: 'A',
-      mode: 'downsampling',
-      format: 'time_series',
-      table: 'sensors',
-      timeColumn: 'ts',
-      metrics: [{ column: 'temperature', aggregation: 'avg' }],
-    };
-
-    const result = ds.applyTemplateVariables(query, {}, filters);
-
-    expect(result.rawSql).toContain(`WHERE "station_id" = 'PV-A07'`);
-    expect(result.rawSql).not.toContain('adhoc_filters');
+    expect(result.rawSql).not.toContain('kwdb_adhoc');
+    expect(result.rawSql).toContain('GROUP BY');
+    expect(result.adHocFilters?.[0]?.condition).toBe(`"station_id" = 'PV-A07'`);
   });
 
   it('expands dashboard variables inside filter values', () => {
     const ds = makeDataSource(makeTemplateSrv());
-    const filters = [{ key: 'station_id', operator: '=', value: '$station' }];
 
     const result = ds.applyTemplateVariables(
       rawQuery('SELECT * FROM sensors'),
       { station: { value: 'PV-A07' } },
-      filters
+      [{ key: 'station_id', operator: '=', value: '$station' }]
     );
 
-    expect(result.rawSql).toContain(`"station_id" = 'PV-A07'`);
+    expect(result.adHocFilters?.[0]?.condition).toBe(`"station_id" = 'PV-A07'`);
+  });
+
+  it('turns a multi-value filter variable into an IN list', () => {
+    const ds = makeDataSource(makeTemplateSrv({ station: ['PV-A07', 'PV-A08'] }));
+
+    const result = ds.applyTemplateVariables(rawQuery('SELECT * FROM sensors'), {}, [
+      { key: 'station_id', operator: '=', value: '$station' },
+    ]);
+
+    expect(result.adHocFilters?.[0]?.condition).toBe(`"station_id" IN ('PV-A07', 'PV-A08')`);
+  });
+
+  it('does not flatten a multi-valued filter into one literal', () => {
+    const ds = makeDataSource(makeTemplateSrv());
+
+    const result = ds.applyTemplateVariables(
+      rawQuery('SELECT * FROM sensors'),
+      { station: { value: ['PV-A07', 'PV-A08'] } },
+      [{ key: 'station_id', operator: '=', value: '$station' }]
+    );
+
+    expect(result.adHocFilters?.[0]?.condition).not.toContain("'{PV-A07,PV-A08}'");
+    expect(result.adHocFilters?.[0]?.condition).toContain('PV-A07');
   });
 });
 

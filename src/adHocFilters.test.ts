@@ -5,7 +5,8 @@ import {
   adHocCondition,
   adHocTables,
   applyAdHocFilters,
-  isAdHocWrapped,
+  isAdHocFiltered,
+  adHocFilterSupport,
   isFilterableStatement,
   stripLeadingComments,
   quoteIdent,
@@ -122,20 +123,67 @@ describe('applyAdHocFilters', () => {
     expect(applyAdHocFilters(sql, [])).toBe(sql);
   });
 
-  it('wraps a SELECT in a subquery so the user statement is untouched', () => {
+  it('adds the condition to the source WHERE so it filters input rows', () => {
     const sql = 'SELECT * FROM t WHERE x = 1';
     expect(applyAdHocFilters(sql, [`"station_id" = 'PV-A07'`])).toBe(
-      ['SELECT *', 'FROM (', sql, ') AS adhoc_filters', `WHERE "station_id" = 'PV-A07'`].join('\n')
+      `SELECT * FROM t WHERE /* kwdb_adhoc */ "station_id" = 'PV-A07' AND x = 1`
     );
   });
 
-  it('strips a trailing semicolon before wrapping', () => {
-    expect(applyAdHocFilters('SELECT 1;', [`"a" = 'b'`])).toContain('FROM (\nSELECT 1\n) AS adhoc_filters');
+  it('adds a WHERE clause when the source statement has none', () => {
+    expect(applyAdHocFilters('SELECT * FROM t', [`"a" = 'b'`])).toBe(
+      `SELECT * FROM t\nWHERE /* kwdb_adhoc */ "a" = 'b'`
+    );
   });
 
-  it('does not wrap SHOW statements', () => {
-    const sql = 'SHOW TABLES';
-    expect(applyAdHocFilters(sql, [`"a" = 'b'`])).toBe(sql);
+  it('filters before ORDER BY and LIMIT rather than after them', () => {
+    const result = applyAdHocFilters('SELECT * FROM t ORDER BY ts LIMIT 5', [`"a" = 'b'`]);
+    expect(result).toBe(`SELECT * FROM t\nWHERE /* kwdb_adhoc */ "a" = 'b' ORDER BY ts LIMIT 5`);
+    expect(result.indexOf('kwdb_adhoc')).toBeLessThan(result.indexOf('ORDER BY'));
+    expect(result.indexOf('kwdb_adhoc')).toBeLessThan(result.indexOf('LIMIT'));
+  });
+
+  it('filters before aggregation so grouped results see filtered input', () => {
+    const sql = "SELECT time_bucket(ts, '15m') AS time, avg(v) FROM t GROUP BY 1";
+    const result = applyAdHocFilters(sql, [`"a" = 'b'`]);
+    expect(result.indexOf('kwdb_adhoc')).toBeGreaterThan(result.indexOf('FROM t'));
+    expect(result.indexOf('kwdb_adhoc')).toBeLessThan(result.indexOf('GROUP BY'));
+  });
+
+  it('removes a trailing semicolon before adding the condition', () => {
+    expect(applyAdHocFilters('SELECT 1 FROM t;', [`"a" = 'b'`])).toBe(
+      `SELECT 1 FROM t\nWHERE /* kwdb_adhoc */ "a" = 'b'`
+    );
+  });
+
+  it('strips a semicolon followed by a trailing line comment', () => {
+    const result = applyAdHocFilters('SELECT * FROM t; -- done', [`"a" = 'b'`]);
+    expect(result).toContain('kwdb_adhoc');
+    expect(result).not.toContain(';');
+    expect(result).not.toContain('-- done');
+  });
+
+  it('strips a semicolon followed by a trailing block comment', () => {
+    const result = applyAdHocFilters('SELECT * FROM t; /* done */', [`"a" = 'b'`]);
+    expect(result).not.toContain(';');
+    expect(result).not.toContain('done');
+  });
+
+  it('does not treat a comment marker inside a literal as a trailing comment', () => {
+    const sql = "SELECT * FROM t WHERE note = 'a -- b'";
+    expect(applyAdHocFilters(sql, [`"a" = 'b'`])).toBe(
+      `SELECT * FROM t WHERE /* kwdb_adhoc */ "a" = 'b' AND note = 'a -- b'`
+    );
+  });
+
+  it('does not treat a block comment marker inside a literal as a trailing comment', () => {
+    const sql = "SELECT * FROM t WHERE note = 'a /* b */ c'";
+    expect(applyAdHocFilters(sql, [`"a" = 'b'`])).toContain(`note = 'a /* b */ c'`);
+  });
+
+  it('leaves a statement it cannot rewrite unchanged', () => {
+    const join = 'SELECT * FROM a JOIN b ON a.id = b.id';
+    expect(applyAdHocFilters(join, [`"a" = 'b'`])).toBe(join);
   });
 });
 
@@ -150,35 +198,67 @@ describe('stripLeadingComments', () => {
 });
 
 describe('applyAdHocFilters with leading comments', () => {
-  it('wraps a commented SELECT instead of silently dropping the filter', () => {
+  it('filters a commented SELECT instead of silently dropping the filter', () => {
     const result = applyAdHocFilters('-- pick rows\nSELECT * FROM t', [`"a" = 'b'`]);
-    expect(result).toContain('adhoc_filters');
+    expect(result).toContain('kwdb_adhoc');
     expect(result).toContain('SELECT * FROM t');
   });
 });
 
-describe('Ad Hoc wrapper idempotency', () => {
-  it('does not nest a second wrapper when applied twice', () => {
+describe('Ad Hoc injection idempotency', () => {
+  it('does not add the condition twice when applied twice', () => {
     const once = applyAdHocFilters('SELECT * FROM t', [`"a" = '1'`]);
     const twice = applyAdHocFilters(once, [`"a" = '1'`]);
 
     expect(twice).toBe(once);
-    expect(twice.match(/AS adhoc_filters/g)).toHaveLength(1);
+    expect(twice.match(/kwdb_adhoc/g)).toHaveLength(1);
     expect(twice.match(/"a" = '1'/g)).toHaveLength(1);
   });
 
-  it('replaces the conditions when a different filter is applied to a wrapped statement', () => {
+  it('replaces the conditions when a different filter is applied', () => {
     const once = applyAdHocFilters('SELECT * FROM t', [`"a" = '1'`]);
     const updated = applyAdHocFilters(once, [`"b" = '2'`]);
 
     expect(updated).toContain(`"b" = '2'`);
     expect(updated).not.toContain(`"a" = '1'`);
-    expect(updated.match(/AS adhoc_filters/g)).toHaveLength(1);
+    expect(updated.match(/kwdb_adhoc/g)).toHaveLength(1);
   });
 
-  it('recognises only the wrapper shape it produces', () => {
-    expect(isAdHocWrapped(applyAdHocFilters('SELECT * FROM t', [`"a" = '1'`]))).toBe(true);
-    expect(isAdHocWrapped('SELECT * FROM t')).toBe(false);
+  it('recognises only statements it produced', () => {
+    expect(isAdHocFiltered(applyAdHocFilters('SELECT * FROM t', [`"a" = '1'`]))).toBe(true);
+    expect(isAdHocFiltered('SELECT * FROM t')).toBe(false);
+  });
+});
+
+describe('adHocFilterSupport', () => {
+  it('accepts a simple single-table SELECT', () => {
+    expect(adHocFilterSupport('SELECT * FROM t', [`"a" = 'b'`])).toEqual({ supported: true });
+  });
+
+  it('rejects a join', () => {
+    expect(adHocFilterSupport('SELECT * FROM a JOIN b ON a.id = b.id', [`"a" = 'b'`])).toEqual({
+      supported: false,
+      reason: 'complex-source',
+    });
+  });
+
+  it('rejects a set operation', () => {
+    expect(adHocFilterSupport('SELECT * FROM a UNION SELECT * FROM b', [`"a" = 'b'`])).toEqual({
+      supported: false,
+      reason: 'complex-source',
+    });
+  });
+
+  it('rejects SHOW and EXPLAIN', () => {
+    expect(adHocFilterSupport('SHOW TABLES', [`"a" = 'b'`])).toEqual({ supported: false, reason: 'not-a-select' });
+    expect(adHocFilterSupport('EXPLAIN SELECT * FROM t', [`"a" = 'b'`])).toEqual({
+      supported: false,
+      reason: 'not-a-select',
+    });
+  });
+
+  it('accepts everything when there are no conditions', () => {
+    expect(adHocFilterSupport('SHOW TABLES', [])).toEqual({ supported: true });
   });
 });
 

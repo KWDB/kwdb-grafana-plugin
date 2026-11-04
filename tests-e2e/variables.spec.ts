@@ -142,8 +142,11 @@ test.describe('dashboard variables and Ad Hoc filters', () => {
       const body = JSON.parse(response.request().postData() ?? '{}') as {
         queries?: Array<{ rawSql?: string }>;
       };
-      expect(body.queries?.[0]?.rawSql).toContain(e2eConfig.tagColumn);
-      expect(body.queries?.[0]?.rawSql).toContain('adhoc_filters');
+      const target = (body.queries?.[0] ?? {}) as { rawSql?: string; adHocFilters?: Array<{ key: string }> };
+      // The predicate travels to the backend, which decides per table whether it
+      // applies and injects it into the source WHERE clause (issue #80).
+      expect(target.adHocFilters?.map((filter) => filter.key)).toContain(e2eConfig.tagColumn);
+      expect(target.rawSql ?? '').not.toContain('adhoc_filters');
     } finally {
       await deleteDashboard(page, uid);
     }
@@ -184,10 +187,9 @@ test.describe('dashboard variables and Ad Hoc filters', () => {
       const body = JSON.parse(response.request().postData() ?? '{}') as {
         queries?: Array<{ rawSql?: string }>;
       };
-      const sql = body.queries?.[0]?.rawSql ?? '';
-      expect(sql).toContain(e2eConfig.tagColumn);
-      expect(sql).not.toContain('adhoc_filters');
-      expect(sql.indexOf(e2eConfig.tagColumn)).toBeLessThan(sql.indexOf('GROUP BY'));
+      const target = (body.queries?.[0] ?? {}) as { rawSql?: string; adHocFilters?: Array<{ key: string }> };
+      expect(target.adHocFilters?.map((filter) => filter.key)).toContain(e2eConfig.tagColumn);
+      expect(target.rawSql ?? '').not.toContain('adhoc_filters');
     } finally {
       await deleteDashboard(page, uid);
     }
@@ -220,6 +222,106 @@ test.describe('dashboard variables and Ad Hoc filters', () => {
       const sql = body.queries?.[0]?.rawSql ?? '';
       expect(sql).toContain('1h');
       expect(sql).not.toContain('$bucket');
+    } finally {
+      await deleteDashboard(page, uid);
+    }
+  });
+
+  test('a mixed-table dashboard applies the filter only where the column exists', async ({
+    page,
+    readProvisionedDataSource,
+  }) => {
+    // Issue #80: one dashboard reads two tables, only one of which has the
+    // filtered column. The other panel must run untouched instead of failing
+    // with a missing-column error.
+    const ds = await readProvisionedDataSource({ fileName: 'datasources.yml' });
+    await skipIfTableUnavailable(page, ds.uid);
+
+    const tables = await page.request.get(`/api/datasources/uid/${encodeURIComponent(ds.uid)}/resources/tables`);
+    const available = ((await tables.json()) as Array<{ name: string }>).map((table) => table.name);
+
+    // Find a column that one table declares and the source table does not.
+    const tagKeysOf = async (table: string): Promise<string[]> => {
+      const response = await page.request.get(
+        `/api/datasources/uid/${encodeURIComponent(ds.uid)}/resources/tag-keys?table=${encodeURIComponent(table)}`
+      );
+      return (await response.json()) as string[];
+    };
+    const sourceKeys = await tagKeysOf(e2eConfig.tableShortName);
+    let onlyThere: { table: string; column: string } | undefined;
+    for (const candidate of available) {
+      if (candidate === e2eConfig.tableShortName) {
+        continue;
+      }
+      const keys = await tagKeysOf(candidate);
+      const exclusive = keys.find((key) => !sourceKeys.includes(key));
+      if (exclusive) {
+        onlyThere = { table: candidate, column: exclusive };
+        break;
+      }
+    }
+    test.skip(!onlyThere, 'no table declares a tag column that the source table lacks');
+    if (!onlyThere) {
+      return;
+    }
+
+    const uid = `kwdb-mixed-${Date.now()}`;
+    const adHocVariable = {
+      name: 'filter',
+      type: 'adhoc',
+      datasource: { type: ds.type, uid: ds.uid },
+      filters: [{ key: onlyThere.column, operator: '!=', value: '__no_match__', origin: 'dashboard' }],
+      baseFilters: [],
+      defaultKeys: [],
+    };
+    const panelTarget = (refId: string, table: string) => ({
+      refId,
+      datasource: { type: ds.type, uid: ds.uid },
+      mode: 'raw',
+      format: 'table',
+      rawSql: `SELECT count(*) AS n FROM ${table}`,
+      adHocTable: table,
+    });
+    const body = {
+      ...dashboard(uid, [adHocVariable], ''),
+      panels: [
+        {
+          ...dashboard(uid, [adHocVariable], '').panels[0],
+          id: 1,
+          targets: [panelTarget('A', e2eConfig.table)],
+        },
+        {
+          ...dashboard(uid, [adHocVariable], '').panels[0],
+          id: 2,
+          title: 'Other table',
+          gridPos: { h: 8, w: 12, x: 12, y: 0 },
+          targets: [panelTarget('B', onlyThere.table)],
+        },
+      ],
+    };
+    await saveDashboard(page, body);
+
+    try {
+      const responses: Array<{ refId?: string; error?: string }> = [];
+      const listener = async (response: import('@playwright/test').Response) => {
+        if (!response.url().includes('/api/ds/query')) {
+          return;
+        }
+        const json = (await response.json().catch(() => ({}))) as { results?: Record<string, { error?: string }> };
+        for (const [refId, result] of Object.entries(json.results ?? {})) {
+          responses.push({ refId, error: result.error });
+        }
+      };
+      page.on('response', listener);
+      await page.goto(`/d/${uid}?orgId=1&kiosk`);
+      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(4000);
+      page.off('response', listener);
+
+      expect(responses.length, 'expected both panels to run').toBeGreaterThan(1);
+      for (const result of responses) {
+        expect(result.error, `target ${result.refId} failed: ${result.error ?? ''}`).toBeUndefined();
+      }
     } finally {
       await deleteDashboard(page, uid);
     }

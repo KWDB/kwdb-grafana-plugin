@@ -82,6 +82,7 @@ func NewDatasource(ctx context.Context, settings backend.DataSourceInstanceSetti
 		handler:      newMetadataHandler(pool, cfg.Database),
 		queryTimeout: queryTimeoutDuration(*cfg),
 		maxRows:      maxRowsValue(*cfg),
+		database:     cfg.Database,
 	}, nil
 }
 

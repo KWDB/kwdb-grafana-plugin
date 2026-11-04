@@ -9,16 +9,10 @@ import {
 } from '@grafana/data';
 import { DataSourceWithBackend, getTemplateSrv, TemplateSrv } from '@grafana/runtime';
 
-import {
-  adHocCondition,
-  adHocTables,
-  addConditionsToBuilderSql,
-  applyAdHocFilters,
-  uniqueMetricFindValues,
-} from './adHocFilters';
+import { adHocCondition, adHocFilterSupport, adHocTables, uniqueMetricFindValues } from './adHocFilters';
 import { buildSql } from './sqlBuilder';
 import { interpolateSql } from './sqlInterpolation';
-import { ColumnInfo, DEFAULT_QUERY, KwdbDataSourceOptions, KwdbQuery, TableInfo } from './types';
+import { ColumnInfo, DEFAULT_QUERY, KwdbAdHocFilter, KwdbDataSourceOptions, KwdbQuery, TableInfo } from './types';
 import { parseVariableQuery } from './variableQuery';
 import { KwdbVariableSupport } from './variableSupport';
 
@@ -158,20 +152,41 @@ export class KwdbDataSource extends DataSourceWithBackend<KwdbQuery, KwdbDataSou
       this.templateSrv.replace(target, vars, format)
     );
 
-    if (isBuilder && query.table) {
-      // Conditions are rendered separately and appended after interpolation, so
-      // the formatter never sees an already-quoted predicate.
-      const conditions = renderAdHocConditions(filters, scopedVars, this.templateSrv);
-      interpolated = addConditionsToBuilderSql(interpolated, conditions);
-    } else {
-      const conditions = renderAdHocConditions(filters, scopedVars, this.templateSrv);
-      interpolated = applyAdHocFilters(interpolated, conditions);
+    // Grafana passes one Ad Hoc filter list per request, so the same list
+    // reaches every target. Rather than injecting all of it here — which made a
+    // dashboard mixing tables fail on targets whose table lacks the column —
+    // the rendered predicates are attached to this target and the backend keeps
+    // only the ones its table actually declares (issue #80).
+    const rendered = renderAdHocFilters(filters, scopedVars, this.templateSrv);
+
+    // Raw SQL is still checked here: a statement the backend cannot safely
+    // rewrite has to be reported, and only the frontend knows the shape it
+    // produced.
+    if (!isBuilder || !query.table) {
+      if (rendered.length > 0) {
+        const support = adHocFilterSupport(interpolated, rendered.map((filter) => filter.condition));
+        if (!support.supported) {
+          // An exception thrown during interpolation only reaches the browser
+          // console and leaves the panel empty, so the reason is carried on the
+          // query for the backend to report as a normal query error.
+          if (interpolated === sql) {
+            return { ...query, adHocError: adHocUnsupportedMessage(support.reason) };
+          }
+          return { ...query, rawSql: interpolated, adHocError: adHocUnsupportedMessage(support.reason) };
+        }
+      }
     }
 
-    if (interpolated === sql) {
+    if (interpolated === sql && rendered.length === 0) {
       return query;
     }
-    return { ...query, rawSql: interpolated };
+    return {
+      ...query,
+      rawSql: interpolated,
+      // Carried to the backend, which decides per table whether each filter
+      // applies. The SQL itself is left unfiltered here.
+      adHocFilters: rendered.length > 0 ? rendered : undefined,
+    };
   }
 
   // Used by Grafana to decide whether a query still needs interpolation (for
@@ -230,12 +245,115 @@ export class KwdbDataSource extends DataSourceWithBackend<KwdbQuery, KwdbDataSou
  * quoted as literals; rendering them separately keeps a quoted predicate from
  * being re-interpolated or re-escaped.
  */
-function renderAdHocConditions(
+/**
+ * Renders Ad Hoc filters as structured predicates.
+ *
+ * Each entry keeps the column name next to the rendered SQL so the backend can
+ * decide whether the target's table declares that column. Value variables are
+ * expanded first, and a multi-valued variable becomes an `IN (...)` list.
+ */
+function renderAdHocFilters(
   filters: AdHocVariableFilter[] | undefined,
   scopedVars: ScopedVars,
   templateSrv: TemplateSrv
-): string[] {
-  return (filters ?? [])
-    .map((filter) => adHocCondition(filter, (value) => templateSrv.replace(value, scopedVars)))
-    .filter((condition): condition is string => condition !== undefined);
+): KwdbAdHocFilter[] {
+  const rendered: KwdbAdHocFilter[] = [];
+  for (const filter of filters ?? []) {
+    const key = filter.key?.trim();
+    const operator = filter.operator?.trim();
+    if (!key || !operator) {
+      continue;
+    }
+    for (const condition of adHocConditions(filter, scopedVars, templateSrv)) {
+      if (condition) {
+        rendered.push({ key, operator, condition });
+      }
+    }
+  }
+  return rendered;
+}
+
+/**
+ * Renders one Ad Hoc filter, expanding a dashboard variable in its value.
+ *
+ * A variable used as a filter value must be expanded before the literal is
+ * quoted, or `station_id = $station` would reach the database literally. When
+ * the variable is multi-valued the filter becomes a multi-value condition so
+ * every selected value is kept instead of being flattened into one string.
+ */
+function adHocConditions(
+  filter: AdHocVariableFilter,
+  scopedVars: ScopedVars,
+  templateSrv: TemplateSrv
+): Array<string | undefined> {
+  const expanded = expandFilterValues(filter, scopedVars, templateSrv);
+  if (Array.isArray(expanded)) {
+    return [adHocCondition({ ...filter, value: expanded[0], values: expanded })];
+  }
+  return [adHocCondition({ ...filter, value: expanded })];
+}
+
+/**
+ * Substitutes dashboard variables found in a filter value.
+ *
+ * Returns an array when the value references a multi-value or `All` variable,
+ * so the caller can build `IN (...)` instead of quoting a list as one string.
+ */
+function expandFilterValues(
+  filter: AdHocVariableFilter,
+  scopedVars: ScopedVars,
+  templateSrv: TemplateSrv
+): string | string[] {
+  const values = filter.values?.length ? filter.values : filter.value !== undefined ? [filter.value] : [];
+  const expandedValues: string[] = [];
+
+  for (const value of values) {
+    if (!templateSrv.containsTemplate(value)) {
+      expandedValues.push(value);
+      continue;
+    }
+    const replaced = templateSrv.replace(value, scopedVars);
+    // A multi-value variable resolves through the glob formatter to `{a,b}`.
+    if (replaced.startsWith('{') && replaced.endsWith('}')) {
+      expandedValues.push(
+        ...replaced
+          .slice(1, -1)
+          .split(',')
+          .map((item) => item.trim())
+      );
+      continue;
+    }
+    expandedValues.push(replaced);
+  }
+
+  // Return a list when the filter is genuinely multi-valued, either because it
+  // already carried several values or because one variable expanded to a list.
+  if (expandedValues.length > 1) {
+    return expandedValues;
+  }
+  return expandedValues[0] ?? '';
+}
+
+/**
+ * Explains why a Raw SQL target cannot carry dashboard Ad Hoc filters.
+ *
+ * The plugin deliberately fails here rather than running the statement
+ * unfiltered: a panel that silently ignores the dashboard filter looks like it
+ * returned "no matching data" for the selected value even though it returned
+ * everything, which is the more dangerous outcome.
+ */
+function adHocUnsupportedMessage(reason: string): string {
+  switch (reason) {
+    case 'not-a-select':
+      return 'Ad Hoc filters need a SELECT or WITH query with a source table; SHOW and EXPLAIN queries cannot be filtered.';
+    case 'no-source-table':
+      return 'Ad Hoc filters need a query with a FROM clause so the filter can be added to its source rows.';
+    case 'complex-source':
+      return (
+        'Ad Hoc filters cannot be applied to Raw SQL that joins tables, uses more than one source, nests its source ' +
+        'in a subquery, or combines queries with UNION. Use the Query Builder, or filter in the SQL itself.'
+      );
+    default:
+      return 'Ad Hoc filters could not be applied to this Raw SQL query.';
+  }
 }

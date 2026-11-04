@@ -152,6 +152,31 @@ func TestQueryDataRejectsEmptyQuery(t *testing.T) {
 	}
 }
 
+func TestQueryDataRejectsUnsupportedAdHocFiltering(t *testing.T) {
+	// The frontend cannot add Ad Hoc filters to a joined Raw SQL statement and
+	// carries the reason on the query. The backend must surface it as a panel
+	// error instead of executing the statement and returning unfiltered rows.
+	ds := Datasource{}
+	resp, err := ds.QueryData(context.Background(), &backend.QueryDataRequest{
+		Queries: []backend.DataQuery{{RefID: "A", JSON: json.RawMessage(
+			`{"rawSql":"SELECT * FROM a JOIN b ON a.id = b.id","adHocError":"Ad Hoc filters cannot be applied to Raw SQL that joins tables."}`,
+		)}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dr := resp.Responses["A"]
+	if dr.Error == nil {
+		t.Fatal("expected the Ad Hoc limitation to be reported as a query error")
+	}
+	if !strings.Contains(dr.Error.Error(), "joins tables") {
+		t.Fatalf("error = %q, want the frontend reason", dr.Error)
+	}
+	if dr.Status != backend.StatusBadRequest {
+		t.Fatalf("status = %v, want bad request", dr.Status)
+	}
+}
+
 func TestRowsToFramesCancelOnTruncate(t *testing.T) {
 	ts := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	rows := &mockRows{

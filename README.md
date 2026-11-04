@@ -261,49 +261,97 @@ The interpolation follows Grafana's SQL data source conventions:
 
 - A single string value is escaped but not quoted, so write the quotes in the
   SQL as shown above.
-- A multi-value or `All` value becomes a quoted SQL list, for use in an `IN`
-  clause: `station_id IN ($station)`.
+- A multi-value value becomes a quoted SQL list, for use in an `IN` clause:
+  `station_id IN ($station)`.
 - Numbers stay unquoted.
 - Variables inside SQL comments and PostgreSQL dollar-quoted strings are left untouched; variables inside ordinary SQL strings and quoted identifiers are expanded.
+
+### Custom `All` values
+
+`All` behaves like the SQL data sources shipped with Grafana. When the variable
+has **no** custom value, Grafana passes the option values and they are rendered
+as a normal quoted list, so `station_id IN ($station)` matches every station.
+
+When the variable **has** a custom _All_ value, that value is a raw SQL
+expression chosen by the dashboard author and is inserted unchanged. It must
+therefore be written for the position where it is used:
+
+```sql
+-- works: the pattern is a string literal
+SELECT ... FROM station_telemetry
+WHERE station_id LIKE '$station';
+
+-- fails: '*' is not a valid bare expression here
+SELECT ... FROM station_telemetry
+WHERE station_id = '$station';
+```
+
+This mirrors upstream Grafana SQL data sources; it is not a plugin-specific
+rule.
+
+### Escaping and explicit formats
+
+Values are escaped for their position: single quotes are doubled inside a
+literal, and a multi-value list is quoted per element. An **explicit format in
+the expression wins over this safeguard**, exactly as in Grafana's own SQL data
+sources: `${var:raw}` inserts the value with no escaping at all. Do not use
+`:raw` on a value that comes from an untrusted source. `${var:sqlstring}` also
+adds its own quotes, so it should not be wrapped in quotes in the SQL text.
 
 Ad Hoc filters on **Query Builder** targets are injected into the source
 `WHERE` clause before aggregation, so filtering happens on input rows even when
 the filtered tag is not selected in the output.
 
-Raw SQL cannot be parsed reliably across joins and subqueries, so its completed
-statement is wrapped:
+For **Raw SQL** targets the filter is added to the source `WHERE` clause in the
+same way, so it applies before that statement's `GROUP BY`, `ORDER BY` and
+`LIMIT`:
 
 ```sql
-SELECT *
-FROM (<your SELECT>)
-AS adhoc_filters
-WHERE "station_id" = 'PV-A07'
+SELECT station_id, avg(ac_power_kw)
+FROM station_telemetry
+WHERE /* kwdb_adhoc */ "station_id" = 'PV-A07' AND $__timeFilter(k_timestamp)
+GROUP BY station_id
 ```
 
-Raw SQL must therefore return every column used by an Ad Hoc filter, and because
-the wrapper runs outside it, a `LIMIT` or an aggregation in that statement is
-applied before the filter (the inner `ORDER BY` still determines row order, but
-the filter runs on the ordered derived table). Prefer Query Builder targets, or
-make the Raw SQL return the unfiltered rows, when the filtered column is not
-otherwise projected.
+The statement has to have a single top-level source table for this to be
+unambiguous. When it joins tables, uses several sources, puts its source in a
+subquery, or combines queries with `UNION`, the plugin **reports an error**
+instead of running the query unfiltered — a panel that silently ignored the
+dashboard filter would look like it found no matching data. Use the Query
+Builder, or move the condition into the SQL itself, for those statements.
+`SHOW` and `EXPLAIN` cannot be filtered either.
 
 Ad Hoc conditions are rendered after the statement has been interpolated and are
 quoted as literals, so a filter value may contain a dashboard variable without
-being escaped twice. `=`, `!=`, `=|`, `!=|`, `=~`, `!~`, `<`, `>`, `<=`, and
-`>=` are supported. A leading SQL comment is accepted; `SHOW` and `EXPLAIN`
-statements cannot be wrapped, so filters are ignored for those statements.
+being escaped twice; a variable in a filter value that selects several options
+becomes an `IN (...)` list. `=`, `!=`, `=|`, `!=|`, `=~`, `!~`, `<`, `>`, `<=`,
+and `>=` are supported. Multiple values are combined with `IN` for `=`/`!=` and
+with `OR` for `=~`/`!~`; a comparison operator with several values is rejected
+rather than silently using only the first. The multi-value forms `=|` and `!=|`
+are only offered by Scenes-based dashboards; the classic picker lists the
+single-value operators only.
 
 Set **Ad Hoc table** in the query editor so the key and value pickers can read
 that table's tag columns; it is required for Raw SQL targets, whose statement
 does not name exactly one table. Query Builder targets default to their
-selected table, and a dashboard that supplies several tables only queries the
-tables that actually declare a key. Without any table, Raw SQL filters can
-still be typed manually.
+selected table. The picker only reads tables that declare the selected key, but
+that is a picker concern: it does not make query filtering per-table. Without
+any table, Raw SQL filters can still be typed manually.
 
-A dashboard Ad Hoc filter is a request-level value in Grafana, so it is applied
-to every panel target in that request, including panels whose table has no such
-tag. Those panels report the database's missing-column error. Tracked in
-[#80](https://github.com/KWDB/kwdb-grafana-plugin/issues/80).
+### Mixed-table dashboards
+
+A dashboard Ad Hoc filter is a request-level value in Grafana, so the same
+filter list reaches every panel in the request. The plugin therefore decides per
+target whether a filter applies: the frontend sends the filter together with the
+column it targets, and the backend keeps it only when **that target's table
+declares the column**. A panel reading a table without the filtered column is
+run untouched instead of failing with a missing-column error, so one dashboard
+can mix tables safely ([#80](https://github.com/KWDB/kwdb-grafana-plugin/issues/80)).
+
+The check reads `SHOW CREATE TABLE`, the same catalog the picker uses, and the
+result is cached for the request, so several panels over one table cost a single
+lookup. If the table cannot be read the query fails with that error rather than
+silently skipping the filter.
 
 ## Alerting and annotations
 

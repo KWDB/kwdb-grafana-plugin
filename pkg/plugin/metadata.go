@@ -172,7 +172,16 @@ func splitTableName(name string) []string {
 }
 
 func (h *metadataHandler) loadTableColumns(ctx context.Context, table string) ([]ColumnInfo, error) {
-	rows, err := h.querier.Query(ctx, "SHOW CREATE TABLE "+qualifiedTable(h.database, table))
+	return loadTableColumns(ctx, h.querier, h.database, table)
+}
+
+// loadTableColumns reads and parses SHOW CREATE TABLE for `table`.
+//
+// It is a package-level function so the query path can reuse the exact catalog
+// read the Ad Hoc picker uses, which keeps "the picker offered this column" and
+// "the filter applies to this target" consistent.
+func loadTableColumns(ctx context.Context, querier rowQuerier, database, table string) ([]ColumnInfo, error) {
+	rows, err := querier.Query(ctx, "SHOW CREATE TABLE "+qualifiedTable(database, table))
 	if err != nil {
 		return nil, err
 	}

@@ -14,6 +14,15 @@ export interface MetricSpec {
   alias?: string;
 }
 
+export interface KwdbAdHocFilter {
+  // Column the filter refers to, without quotes.
+  key: string;
+  // Comparison operator as written in SQL.
+  operator: string;
+  // Rendered predicate, for example `"station_id" = 'PV-A07'`.
+  condition: string;
+}
+
 export interface KwdbQuery extends DataQuery {
   mode: KwdbQueryMode;
   // Output format and per-tag frame splitting are consumed by the backend
@@ -27,6 +36,15 @@ export interface KwdbQuery extends DataQuery {
   // targets default to `table`. Scenes dashboards may also pass their panel
   // targets, in which case those take precedence.
   adHocTable?: string;
+  // Dashboard Ad Hoc filters for this target. Grafana passes one request-level
+  // filter list to every target, so the frontend attaches it here and the
+  // backend applies only the filters whose column this target's table declares
+  // (issue #80). Each entry carries the already-rendered SQL predicate.
+  adHocFilters?: KwdbAdHocFilter[];
+  // Set by the frontend when dashboard Ad Hoc filters cannot be applied to this
+  // Raw SQL statement. The backend turns it into a query error so the panel
+  // shows the reason instead of silently returning unfiltered data.
+  adHocError?: string;
   timeColumn?: string;
   tags?: string[];
   metrics?: MetricSpec[];
