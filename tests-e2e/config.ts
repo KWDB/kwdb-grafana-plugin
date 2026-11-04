@@ -40,6 +40,21 @@ export interface E2EConfig {
    */
   gapfillFrom: string;
   gapfillTo: string;
+  /**
+   * Adversarial table seeded by scripts/init.sql. It stores the shapes that break
+   * plugin-side logic rather than the database: a hole wider than the bucket, rows
+   * written out of order, a NULL metric, and tag values with commas/quotes/Unicode.
+   * Specs that need it skip themselves when it is absent, so pointing the suite at
+   * another database stays possible.
+   */
+  edgeTable: string;
+  edgeTableShortName: string;
+  edgeTimeColumn: string;
+  edgeMetric: string;
+  edgeTagColumn: string;
+  /** Range that covers the whole edge dataset; it is seeded relative to `now()`. */
+  edgeFrom: string;
+  edgeTo: string;
 }
 
 export const INTERVAL_PRESETS = ['1m', '5m', '15m', '1h', '6h', '1d'];
@@ -59,6 +74,10 @@ function parseColumns(value: string): string[] {
 const table = envValue('KWDB_E2E_TABLE') ?? 'demo_ts.sensors';
 const tableShortName = table.split('.').pop() ?? table;
 const tableType = envValue('KWDB_E2E_TABLE_TYPE') ?? 'TIME SERIES TABLE';
+// The edge dataset lives in the same database as the primary table, so pointing the
+// suite at another database keeps the pair consistent.
+const database = table.includes('.') ? table.slice(0, table.lastIndexOf('.')) : '';
+const edgeTableShortName = envValue('KWDB_E2E_EDGE_TABLE') ?? 'edge_cases';
 
 export const e2eConfig: E2EConfig = {
   table,
@@ -74,4 +93,12 @@ export const e2eConfig: E2EConfig = {
   to: envValue('KWDB_E2E_TO') ?? 'now',
   gapfillFrom: envValue('KWDB_E2E_GAPFILL_FROM') ?? 'now-1d',
   gapfillTo: envValue('KWDB_E2E_GAPFILL_TO') ?? 'now',
+  edgeTable: database ? `${database}.${edgeTableShortName}` : edgeTableShortName,
+  edgeTableShortName,
+  edgeTimeColumn: envValue('KWDB_E2E_EDGE_TIME_COLUMN') ?? 'ts',
+  edgeMetric: envValue('KWDB_E2E_EDGE_METRIC') ?? 'value',
+  edgeTagColumn: envValue('KWDB_E2E_EDGE_TAG_COLUMN') ?? 'device_id',
+  // The dataset is seeded between 60 minutes ago and now.
+  edgeFrom: envValue('KWDB_E2E_EDGE_FROM') ?? 'now-90m',
+  edgeTo: envValue('KWDB_E2E_EDGE_TO') ?? 'now',
 };

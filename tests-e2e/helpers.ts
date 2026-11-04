@@ -44,20 +44,41 @@ interface JsonResponse {
  * runnable in CI while allowing the same specs to run against arbitrary KWDB databases.
  */
 export async function skipIfTableUnavailable(page: Page, datasourceUid: string): Promise<void> {
+  await skipUnlessTable(
+    page,
+    datasourceUid,
+    e2eConfig.tableShortName,
+    `Table ${e2eConfig.table} was not found in datasource ${datasourceUid}. ` +
+      'Set KWDB_E2E_TABLE (plus KWDB_E2E_TIME_COLUMN/KWDB_E2E_COLUMNS/KWDB_E2E_TAG_COLUMN/KWDB_E2E_METRIC) ' +
+      'to run these tests against an existing KWDB table.'
+  );
+}
+
+/**
+ * Skips the current test when the adversarial `edge_cases` table seeded by scripts/init.sql
+ * is missing. Pointing the suite at another database stays possible; those specs simply skip
+ * instead of failing on data they do not own.
+ */
+export async function skipIfEdgeTableUnavailable(page: Page, datasourceUid: string): Promise<void> {
+  await skipUnlessTable(
+    page,
+    datasourceUid,
+    e2eConfig.edgeTableShortName,
+    `Table ${e2eConfig.edgeTable} was not found in datasource ${datasourceUid}. ` +
+      'It is created by scripts/init.sql; set KWDB_E2E_EDGE_TABLE to override its name.'
+  );
+}
+
+async function skipUnlessTable(page: Page, datasourceUid: string, shortName: string, reason: string): Promise<void> {
   const response = await page.request.get(`/api/datasources/uid/${encodeURIComponent(datasourceUid)}/resources/tables`);
   expect(response.ok(), `GET /resources/tables returned HTTP ${response.status()}`).toBeTruthy();
 
   const tables = (await response.json()) as TableResourceItem[];
   expect(Array.isArray(tables), 'expected /resources/tables to return an array').toBeTruthy();
 
-  const found = tables.some((table) => (table.name ?? '').toLowerCase() === e2eConfig.tableShortName.toLowerCase());
+  const found = tables.some((table) => (table.name ?? '').toLowerCase() === shortName.toLowerCase());
   if (!found) {
-    test.skip(
-      true,
-      `Table ${e2eConfig.table} was not found in datasource ${datasourceUid}. ` +
-        'Set KWDB_E2E_TABLE (plus KWDB_E2E_TIME_COLUMN/KWDB_E2E_COLUMNS/KWDB_E2E_TAG_COLUMN/KWDB_E2E_METRIC) ' +
-        'to run these tests against an existing KWDB table.'
-    );
+    test.skip(true, reason);
   }
 }
 

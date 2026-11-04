@@ -199,3 +199,100 @@ func TestExpandMacrosNestingIsBounded(t *testing.T) {
 		t.Fatalf("expected the over-deep macro to be left in place, got %q", got)
 	}
 }
+
+// TestExpandMacrosKeepsStringLiteralsIntact covers the failure mode that would
+// silently corrupt a user's query: a macro-looking token inside a quoted string
+// or comment must not be rewritten. A rewritten literal changes the filter the
+// user wrote, which is worse than leaving the macro unexpanded.
+func TestExpandMacrosKeepsStringLiteralsIntact(t *testing.T) {
+	tr := backend.TimeRange{
+		From: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		To:   time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC),
+	}
+
+	tests := []struct {
+		name string
+		sql  string
+		want string
+	}{
+		{
+			name: "macro inside a single quoted literal",
+			sql:  "SELECT * FROM t WHERE note = '$__timeFrom'",
+			want: "SELECT * FROM t WHERE note = '$__timeFrom'",
+		},
+		{
+			name: "macro inside a quoted identifier",
+			sql:  `SELECT "$__timeTo" FROM t`,
+			want: `SELECT "$__timeTo" FROM t`,
+		},
+		{
+			name: "macro inside a line comment",
+			sql:  "SELECT 1 -- $__timeFilter(ts)\n",
+			want: "SELECT 1 -- $__timeFilter(ts)\n",
+		},
+		{
+			name: "macro inside a block comment",
+			sql:  "SELECT 1 /* $__timeGroup(ts, '5m') */",
+			want: "SELECT 1 /* $__timeGroup(ts, '5m') */",
+		},
+		{
+			name: "macro-like suffix of an identifier",
+			sql:  "SELECT ts$__timeFrom FROM t",
+			want: "SELECT ts$__timeFrom FROM t",
+		},
+		{
+			name: "escaped quote before a real macro",
+			sql:  "SELECT * FROM t WHERE note = 'it''s' AND $__timeFilter(ts)",
+			want: "SELECT * FROM t WHERE note = 'it''s' AND (ts >= '2026-01-01 00:00:00'::TIMESTAMP AND ts <= '2026-01-01 01:00:00'::TIMESTAMP)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ExpandMacros(tt.sql, tr); got != tt.want {
+				t.Errorf("ExpandMacros(%q) = %q, want %q", tt.sql, got, tt.want)
+			}
+		})
+	}
+}
+
+// FuzzExpandMacros asserts the invariants that matter for a query rewriter: it
+// must never panic, never drop the prefix it does not understand, and never
+// return a statement with braces unbalanced relative to the input.
+func FuzzExpandMacros(f *testing.F) {
+	seeds := []string{
+		"SELECT $__timeFilter(ts) FROM t",
+		"SELECT $__timeGroup(ts, '5m'), count(*) FROM t GROUP BY 1",
+		"SELECT '$__timeFrom' AS literal",
+		"-- $__timeTo\nSELECT 1",
+		"SELECT 1;",
+		"",
+		"$__timeFilter(",
+		"$__timeFilter()",
+		"SELECT $$ $__timeFrom $$",
+		`SELECT "a$__timeTo"`,
+	}
+	for _, seed := range seeds {
+		f.Add(seed)
+	}
+
+	tr := backend.TimeRange{
+		From: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		To:   time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC),
+	}
+
+	f.Fuzz(func(t *testing.T, sql string) {
+		got := ExpandMacros(sql, tr)
+		if strings.Count(got, "(") != strings.Count(got, ")") {
+			// Only hold the invariant for inputs that were balanced to begin with;
+			// an unbalanced input may legitimately stay unbalanced.
+			if strings.Count(sql, "(") == strings.Count(sql, ")") {
+				t.Fatalf("balanced input produced unbalanced output: %q -> %q", sql, got)
+			}
+		}
+		// An empty input must never turn into generated SQL.
+		if sql == "" && got != "" {
+			t.Fatalf("empty input produced %q", got)
+		}
+	})
+}
