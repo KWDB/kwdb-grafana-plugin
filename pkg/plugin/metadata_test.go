@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/jackc/pgx/v5"
 )
 
@@ -200,6 +201,146 @@ func TestColumnsResourceUnparseableDDL(t *testing.T) {
 	}
 	if string(resp.Body) != "[]\n" {
 		t.Fatalf("body = %q, want []", resp.Body)
+	}
+}
+
+func TestTagKeysResource(t *testing.T) {
+	ddl := `CREATE TABLE iot_db.sensors (
+    ts TIMESTAMPTZ NOT NULL,
+    temperature DOUBLE
+) TAGS (
+    device_id VARCHAR(100) NOT NULL,
+    location VARCHAR(100) NOT NULL
+) PRIMARY TAGS (device_id)`
+
+	handler := newMetadataHandler(&fakeQuerier{
+		fn: func(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+			return &mockRows{rows: [][]any{{"sensors", ddl}}}, nil
+		},
+	}, "iot_db")
+
+	resp := callResource(t, handler, "/tag-keys?table=sensors")
+	if resp.Status != 200 {
+		t.Fatalf("status = %d, body = %s", resp.Status, resp.Body)
+	}
+	var keys []string
+	if err := json.Unmarshal(resp.Body, &keys); err != nil {
+		t.Fatal(err)
+	}
+	if len(keys) != 2 || keys[0] != "device_id" || keys[1] != "location" {
+		t.Errorf("unexpected tag keys: %#v", keys)
+	}
+}
+
+func TestTagKeysMissingTable(t *testing.T) {
+	handler := newMetadataHandler(&fakeQuerier{}, "iot_db")
+	resp := callResource(t, handler, "/tag-keys")
+	if resp.Status != 400 {
+		t.Fatalf("status = %d, want 400", resp.Status)
+	}
+}
+
+func TestTagKeysResourceError(t *testing.T) {
+	handler := newMetadataHandler(&fakeQuerier{
+		fn: func(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+			return nil, errors.New("catalog unavailable")
+		},
+	}, "iot_db")
+
+	resp := callResource(t, handler, "/tag-keys?table=sensors")
+	if resp.Status != 500 {
+		t.Fatalf("status = %d, want 500", resp.Status)
+	}
+	if !strings.Contains(string(resp.Body), "catalog unavailable") {
+		t.Fatalf("body = %q, want the database error", resp.Body)
+	}
+}
+
+func TestTagKeysEmptyListIsJSONArray(t *testing.T) {
+	ddl := `CREATE TABLE iot_db.metrics (
+    ts TIMESTAMPTZ NOT NULL,
+    value DOUBLE
+)`
+	handler := newMetadataHandler(&fakeQuerier{
+		fn: func(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+			return &mockRows{rows: [][]any{{"metrics", ddl}}}, nil
+		},
+	}, "iot_db")
+
+	resp := callResource(t, handler, "/tag-keys?table=metrics")
+	if resp.Status != 200 {
+		t.Fatalf("status = %d, body = %s", resp.Status, resp.Body)
+	}
+	if string(resp.Body) != "[]\n" {
+		t.Fatalf("body = %q, want []", resp.Body)
+	}
+}
+
+func TestTagKeysMethodNotAllowed(t *testing.T) {
+	handler := newMetadataHandler(&fakeQuerier{}, "iot_db")
+	var resp backend.CallResourceResponse
+	err := handler.CallResource(context.Background(), &backend.CallResourceRequest{
+		PluginContext: backend.PluginContext{DataSourceInstanceSettings: &backend.DataSourceInstanceSettings{}},
+		Method:        "POST",
+		Path:          "/tag-keys",
+		URL:           "/tag-keys?table=sensors",
+	}, backend.CallResourceResponseSenderFunc(func(r *backend.CallResourceResponse) error {
+		resp = *r
+		return nil
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Status != 405 {
+		t.Fatalf("status = %d, want 405", resp.Status)
+	}
+}
+
+func TestQualifiedTableNames(t *testing.T) {
+	ddl := `CREATE TABLE demo_ts.sensors (
+    ts TIMESTAMPTZ NOT NULL,
+    temperature DOUBLE
+) TAGS (
+    device_id INT NOT NULL
+) PRIMARY TAGS (device_id)`
+
+	var statements []string
+	handler := newMetadataHandler(&fakeQuerier{
+		fn: func(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+			statements = append(statements, sql)
+			if strings.HasPrefix(sql, "SHOW CREATE TABLE") {
+				return &mockRows{rows: [][]any{{"sensors", ddl}}}, nil
+			}
+			return &mockRows{rows: [][]any{{int64(1)}}}, nil
+		},
+	}, "factory")
+
+	resp := callResource(t, handler, "/tag-keys?table=demo_ts.sensors")
+	if resp.Status != 200 {
+		t.Fatalf("status = %d, body = %s", resp.Status, resp.Body)
+	}
+	want := `SHOW CREATE TABLE "demo_ts"."sensors"`
+	if len(statements) == 0 || statements[0] != want {
+		t.Fatalf("statements = %#v, want %q", statements, want)
+	}
+	if strings.Contains(statements[0], `"factory"`) {
+		t.Fatalf("qualified name must not be prefixed with the configured database: %q", statements[0])
+	}
+}
+
+func TestSplitTableName(t *testing.T) {
+	cases := map[string][]string{
+		"":                  nil,
+		"sensors":           {"sensors"},
+		"demo_ts.sensors":   {"demo_ts", "sensors"},
+		`demo_ts."a.b"`:     {"demo_ts", "a.b"},
+		`demo_ts."odd""nm"`: {"demo_ts", `odd"nm`},
+	}
+	for input, want := range cases {
+		got := splitTableName(input)
+		if strings.Join(got, "\x1f") != strings.Join(want, "\x1f") {
+			t.Errorf("splitTableName(%q) = %#v, want %#v", input, got, want)
+		}
 	}
 }
 

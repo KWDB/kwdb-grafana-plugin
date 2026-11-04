@@ -22,6 +22,11 @@ export interface KwdbQuery extends DataQuery {
   format: KwdbQueryFormat;
   // Common fields
   table?: string;
+  // Table used by the dashboard Ad Hoc key/value picker. A Raw SQL target has
+  // no `table` field, so without this the picker cannot infer one; builder
+  // targets default to `table`. Scenes dashboards may also pass their panel
+  // targets, in which case those take precedence.
+  adHocTable?: string;
   timeColumn?: string;
   tags?: string[];
   metrics?: MetricSpec[];

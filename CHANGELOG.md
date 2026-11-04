@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Dashboard Ad Hoc filters are applied before aggregation for Query Builder
+  targets and through a documented wrapper for Raw SQL. The query editor's
+  **Ad Hoc table** setting supplies the table used for key suggestions; the new
+  `/tag-keys` resource returns its tag columns, and the existing `/tag-values`
+  resource returns their values. See #79.
+- Browser regression coverage saves temporary dashboards and verifies template
+  variables and Ad Hoc filters on the actual panel request path.
+
+### Fixed
+
+- Dashboard and template variables are now interpolated in SQL before it is
+  sent to KWDB. Single strings are SQL-escaped, multi-value/`All` values become
+  quoted lists, numbers stay numeric, and comments and dollar-quoted strings
+  are left untouched. Grafana time macros continue to be expanded by the
+  backend. See #78.
+
 ## v1.4.1 (2026-10-29)
 
 ### Changed

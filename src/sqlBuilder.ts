@@ -1,3 +1,4 @@
+import { addConditionsToBuilderSql } from './adHocFilters';
 import type { KwdbInterpolateMode, KwdbQuery, MetricSpec } from './types';
 
 const INDENT = '       ';
@@ -22,7 +23,7 @@ function quoteIdent(identifier: string): string {
  * literal identifier (that is what a name containing a quote character looks
  * like).
  */
-function splitQualifiedName(name: string): string[] | null {
+export function splitQualifiedName(name: string): string[] | null {
   const parts: string[] = [];
   let current = '';
   let inQuotes = false;
@@ -63,7 +64,7 @@ function splitQualifiedName(name: string): string[] | null {
  * unbalanced quote makes the whole input a single literal name, so a quote
  * character in a table name is escaped (`sen"sors` -> `"sen""sors"`).
  */
-function quoteQualified(name: string): string {
+export function quoteQualified(name: string): string {
   const trimmed = name.trim();
   const parts = splitQualifiedName(trimmed);
   if (!parts || parts.length === 0) {
@@ -410,18 +411,24 @@ export function buildRawSql(query: KwdbQuery): string {
   return query.rawSql ?? '';
 }
 
-export function buildSql(query: KwdbQuery): string {
+/**
+ * Builds the statement for one query. `filterConditions` are already-rendered
+ * Ad Hoc predicates; builder modes inject them into the source WHERE clause
+ * before aggregation, while Raw SQL uses its explicit custom statement and is
+ * filtered by the datasource's Raw SQL wrapper instead.
+ */
+export function buildSql(query: KwdbQuery, filterConditions: string[] = []): string {
   switch (query.mode) {
     case 'gapfill':
-      return buildGapfillSql(query);
+      return addConditionsToBuilderSql(buildGapfillSql(query), filterConditions);
     case 'latest':
-      return buildLatestSql(query);
+      return addConditionsToBuilderSql(buildLatestSql(query), filterConditions);
     case 'window':
-      return buildWindowSql(query);
+      return addConditionsToBuilderSql(buildWindowSql(query), filterConditions);
     case 'raw':
       return buildRawSql(query);
     case 'downsampling':
     default:
-      return buildDownsamplingSql(query);
+      return addConditionsToBuilderSql(buildDownsamplingSql(query), filterConditions);
   }
 }

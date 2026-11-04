@@ -242,6 +242,69 @@ millisecond dashboard ranges and KWDB's default `TIMESTAMP` precision is
 milliseconds (3 digits). Precision beyond milliseconds is therefore not
 available end to end; use a `TIMESTAMP(6)`/`TIMESTAMP(9)` column if you need it.
 
+## Template variables and Ad Hoc filters
+
+Dashboard and template variables are expanded before a query is sent to KWDB,
+for both **Raw SQL** and **Query Builder** targets. Time macros are deliberately
+left for the backend, because they only need the panel time range.
+
+```sql
+SELECT time_bucket(k_timestamp, '${interval}') AS time,
+       avg(ac_power_kw) AS ac_power_kw
+FROM station_telemetry
+WHERE $__timeFilter(k_timestamp)
+  AND station_id = '$station'
+GROUP BY time_bucket(k_timestamp, '${interval}')
+```
+
+The interpolation follows Grafana's SQL data source conventions:
+
+- A single string value is escaped but not quoted, so write the quotes in the
+  SQL as shown above.
+- A multi-value or `All` value becomes a quoted SQL list, for use in an `IN`
+  clause: `station_id IN ($station)`.
+- Numbers stay unquoted.
+- Variables inside SQL comments and PostgreSQL dollar-quoted strings are left untouched; variables inside ordinary SQL strings and quoted identifiers are expanded.
+
+Ad Hoc filters on **Query Builder** targets are injected into the source
+`WHERE` clause before aggregation, so filtering happens on input rows even when
+the filtered tag is not selected in the output.
+
+Raw SQL cannot be parsed reliably across joins and subqueries, so its completed
+statement is wrapped:
+
+```sql
+SELECT *
+FROM (<your SELECT>)
+AS adhoc_filters
+WHERE "station_id" = 'PV-A07'
+```
+
+Raw SQL must therefore return every column used by an Ad Hoc filter, and because
+the wrapper runs outside it, a `LIMIT` or an aggregation in that statement is
+applied before the filter (the inner `ORDER BY` still determines row order, but
+the filter runs on the ordered derived table). Prefer Query Builder targets, or
+make the Raw SQL return the unfiltered rows, when the filtered column is not
+otherwise projected.
+
+Ad Hoc conditions are rendered after the statement has been interpolated and are
+quoted as literals, so a filter value may contain a dashboard variable without
+being escaped twice. `=`, `!=`, `=|`, `!=|`, `=~`, `!~`, `<`, `>`, `<=`, and
+`>=` are supported. A leading SQL comment is accepted; `SHOW` and `EXPLAIN`
+statements cannot be wrapped, so filters are ignored for those statements.
+
+Set **Ad Hoc table** in the query editor so the key and value pickers can read
+that table's tag columns; it is required for Raw SQL targets, whose statement
+does not name exactly one table. Query Builder targets default to their
+selected table, and a dashboard that supplies several tables only queries the
+tables that actually declare a key. Without any table, Raw SQL filters can
+still be typed manually.
+
+A dashboard Ad Hoc filter is a request-level value in Grafana, so it is applied
+to every panel target in that request, including panels whose table has no such
+tag. Those panels report the database's missing-column error. Tracked in
+[#80](https://github.com/KWDB/kwdb-grafana-plugin/issues/80).
+
 ## Alerting and annotations
 
 The plugin declares Grafana Alerting and annotation support. Both use the same

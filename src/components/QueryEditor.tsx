@@ -37,7 +37,7 @@ export function QueryEditor({ datasource, query, onChange, onRunQuery }: Props) 
 
   return (
     <div>
-      <QueryEditorToolbar query={query} onChange={onChange} />
+      <QueryEditorToolbar datasource={datasource} query={query} onChange={onChange} />
       {editor}
     </div>
   );
