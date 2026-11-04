@@ -26,11 +26,11 @@ npx ts-node --compiler-options '{"module":"commonjs","moduleResolution":"node","
 
 ## 文件
 
-| 文件                            | 作用                                                                                                                                                                    |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `gen.ts`                        | 生成 `cases.json`：56 条 SQL + 模板变量往返用例。只展开 `$__timeFrom`/`$__timeTo`（与 `pkg/plugin/macros.go` 一致）；若生成的 SQL 里仍含 `$__timeFilter`/`$__timeGroup` 会直接抛错，因为这两个宏由后端展开，不能原样执行 |
-| `run.ts`                        | 读 `cases.json`，逐条 psql 执行，写 `results.json`。`expectFail: true` 的用例失败时记为 `xfail`（按设计被数据库拒绝），不计入失败数                                       |
-| `cases.json` / `results.json`   | **生成物，已被 `.gitignore` 忽略，不要提交**；`results.json` 只是某次真机运行的证据                                                                                     |
+| 文件                          | 作用                                                                                                                                                                                                                     |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `gen.ts`                      | 生成 `cases.json`：56 条 SQL + 模板变量往返用例。只展开 `$__timeFrom`/`$__timeTo`（与 `pkg/plugin/macros.go` 一致）；若生成的 SQL 里仍含 `$__timeFilter`/`$__timeGroup` 会直接抛错，因为这两个宏由后端展开，不能原样执行 |
+| `run.ts`                      | 读 `cases.json`，逐条 psql 执行，写 `results.json`。`expectFail: true` 的用例失败时记为 `xfail`（按设计被数据库拒绝），不计入失败数                                                                                      |
+| `cases.json` / `results.json` | **生成物，已被 `.gitignore` 忽略，不要提交**；`results.json` 只是某次真机运行的证据                                                                                                                                      |
 
 ## 状态含义
 
@@ -50,10 +50,10 @@ npx ts-node --compiler-options '{"module":"commonjs","moduleResolution":"node","
 
 需要的文件：
 
-| 文件                                 | 用途                                      |
-| ------------------------------------ | ----------------------------------------- |
-| `ca.crt`                             | `KWDB_TLS_ROOT_CERT`，`verify-ca`/`verify-full` 用 |
-| `client.root.crt` / `client.root.key` | 可选的客户端证书认证                      |
+| 文件                                  | 用途                                               |
+| ------------------------------------- | -------------------------------------------------- |
+| `ca.crt`                              | `KWDB_TLS_ROOT_CERT`，`verify-ca`/`verify-full` 用 |
+| `client.root.crt` / `client.root.key` | 可选的客户端证书认证                               |
 
 另需一个**没有**签发该节点证书的 CA 作为 `KWDB_TLS_FOREIGN_CA`，用来证明客户端真的在校验证书链。
 

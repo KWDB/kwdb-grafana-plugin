@@ -7,12 +7,7 @@ import { KwdbDataSourceOptions, KwdbSecureJsonData } from '../types';
 type Props = DataSourcePluginOptionsEditorProps<KwdbDataSourceOptions, KwdbSecureJsonData>;
 
 type NumericJsonDataField =
-  | 'maxConns'
-  | 'maxConnLifetime'
-  | 'maxConnIdleTime'
-  | 'connectTimeout'
-  | 'queryTimeout'
-  | 'maxRows';
+  'maxConns' | 'maxConnLifetime' | 'maxConnIdleTime' | 'connectTimeout' | 'queryTimeout' | 'maxRows';
 
 const SSL_MODE_OPTIONS: Array<{ label: string; value: NonNullable<KwdbDataSourceOptions['sslMode']> }> = [
   { label: 'disable', value: 'disable' },
@@ -123,7 +118,13 @@ export function ConfigEditor(props: Props) {
         />
       </InlineField>
       <InlineField label="User" labelWidth={14}>
-        <Input id="config-editor-user" onChange={onUserChange} value={jsonData.user ?? ''} placeholder="root" width={40} />
+        <Input
+          id="config-editor-user"
+          onChange={onUserChange}
+          value={jsonData.user ?? ''}
+          placeholder="root"
+          width={40}
+        />
       </InlineField>
       <InlineField label="SSL Mode" labelWidth={14}>
         <Select<'disable' | 'require' | 'verify-ca' | 'verify-full'>
