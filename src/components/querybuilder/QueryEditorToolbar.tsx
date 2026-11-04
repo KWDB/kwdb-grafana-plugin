@@ -84,8 +84,10 @@ export function QueryEditorToolbar({ query, onChange, datasource }: Props) {
     onChange({ ...query, format });
   };
 
+  const isRaw = (query.mode ?? 'downsampling') === 'raw';
+
   return (
-    <Stack gap={2}>
+    <Stack gap={2} wrap="wrap">
       <InlineField label="Mode" labelWidth={10}>
         <Select<KwdbQueryMode>
           aria-label="Mode"
@@ -110,30 +112,38 @@ export function QueryEditorToolbar({ query, onChange, datasource }: Props) {
           menuShouldPortal={false}
         />
       </InlineField>
-      <InlineField
-        label="Ad Hoc table"
-        labelWidth={13}
-        tooltip="Table used to suggest keys and values for dashboard Ad Hoc filters. Builder queries default to their selected table."
-      >
-        {datasource ? (
-          <TableSelector
-            datasource={datasource}
-            value={query.adHocTable ?? query.table}
-            onChange={(adHocTable) => onChange({ ...query, adHocTable })}
-            ariaLabel="Ad Hoc table"
-            placeholder="Use query table"
-          />
-        ) : (
-          <Input
-            aria-label="Ad Hoc table"
-            value={query.adHocTable ?? ''}
-            onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
-              onChange({ ...query, adHocTable: event.currentTarget.value })
-            }
-            width={40}
-          />
-        )}
-      </InlineField>
+      {/*
+        Only Raw SQL needs this: a builder target already names its table, so
+        the Ad Hoc picker falls back to it and showing the field there was
+        redundant. Raw SQL has no table field, so the picker cannot guess.
+      */}
+      {isRaw && (
+        <InlineField
+          label="Ad Hoc table"
+          labelWidth={13}
+          tooltip="Table whose tags the dashboard Ad Hoc filter offers, and the table the backend checks before applying a filter to this query. Leave empty when the SQL reads a single table and the filter should follow it."
+          grow
+        >
+          {datasource ? (
+            <TableSelector
+              datasource={datasource}
+              value={query.adHocTable}
+              onChange={(adHocTable) => onChange({ ...query, adHocTable: adHocTable || undefined })}
+              ariaLabel="Ad Hoc table"
+              placeholder="Use for tag suggestions"
+            />
+          ) : (
+            <Input
+              aria-label="Ad Hoc table"
+              value={query.adHocTable ?? ''}
+              onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+                onChange({ ...query, adHocTable: event.currentTarget.value })
+              }
+              width={40}
+            />
+          )}
+        </InlineField>
+      )}
     </Stack>
   );
 }

@@ -99,14 +99,117 @@
       ],
       "title": "Latest sensor readings",
       "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "kwdb-tsdb-datasource",
+        "uid": "kwdb-tsdb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "celsius"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "kwdb-tsdb-datasource",
+            "uid": "kwdb-tsdb"
+          },
+          "refId": "A",
+          "mode": "downsampling",
+          "format": "time_series",
+          "table": "sensors",
+          "timeColumn": "ts",
+          "interval": "${interval}",
+          "tags": ["device_id"],
+          "metrics": [
+            {
+              "column": "temperature",
+              "aggregation": "avg"
+            }
+          ],
+          "rawSql": ""
+        }
+      ],
+      "title": "Builder downsampling (follows interval)",
+      "type": "timeseries"
     }
   ],
   "schemaVersion": 39,
-  "tags": [
-    "kwdb"
-  ],
+  "tags": ["kwdb"],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "name": "interval",
+        "label": "聚合粒度",
+        "type": "custom",
+        "description": "Controls the time_bucket size of the builder panels.",
+        "query": "1m,5m,15m,1h,6h,1d",
+        "current": {
+          "text": "5m",
+          "value": "5m",
+          "selected": true
+        },
+        "options": [
+          {
+            "text": "1m",
+            "value": "1m"
+          },
+          {
+            "text": "5m",
+            "value": "5m",
+            "selected": true
+          },
+          {
+            "text": "15m",
+            "value": "15m"
+          },
+          {
+            "text": "1h",
+            "value": "1h"
+          },
+          {
+            "text": "6h",
+            "value": "6h"
+          },
+          {
+            "text": "1d",
+            "value": "1d"
+          }
+        ],
+        "hide": 0,
+        "multi": false,
+        "includeAll": false
+      }
+    ]
   },
   "time": {
     "from": "now-30m",
