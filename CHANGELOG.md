@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Dashboard Ad Hoc filters are applied before aggregation for Query Builder
+  targets and in the source `WHERE` clause for single-table Raw SQL. The query editor's
+  **Ad Hoc table** setting supplies the table used for key suggestions; the new
+  `/tag-keys` resource returns its tag columns, and the existing `/tag-values`
+  resource returns their values. See #79.
+- Browser regression coverage saves temporary dashboards and verifies template
+  variables and Ad Hoc filters on the actual panel request path.
+
+### Fixed
+
+- Dashboard and template variables are now interpolated in SQL before it is
+  sent to KWDB. Single strings are SQL-escaped, multi-value values become quoted
+  lists, numbers stay numeric, and comments and dollar-quoted strings are left
+  untouched. Grafana time macros continue to be expanded by the backend. A
+  custom `All` value is inserted unchanged, matching Grafana's SQL data sources.
+  See #78.
+
+### Known limitations
+
+- Raw SQL Ad Hoc filters are only supported for statements with a single
+  top-level source table; joins, `FROM` subqueries, `UNION` and `SHOW`/`EXPLAIN`
+  report an error instead of running unfiltered.
+
+### Fixed
+
+- A dashboard Ad Hoc filter is applied only to the panel targets whose own table
+  declares the filtered column. Previously the request-level filter list was
+  injected into every target, so a dashboard mixing tables failed on targets
+  missing that column. Targets without the column now run unfiltered instead of
+  erroring. See #80.
+
 ## v1.4.1 (2026-10-29)
 
 ### Changed

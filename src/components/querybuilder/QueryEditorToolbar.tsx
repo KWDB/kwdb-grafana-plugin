@@ -1,7 +1,8 @@
 import React from 'react';
-import { InlineField, Select, Stack } from '@grafana/ui';
+import { InlineField, Input, Select, Stack } from '@grafana/ui';
 
 import { buildSql } from '../../sqlBuilder';
+import { TableSelector } from './shared/TableSelector';
 import type { KwdbQuery, KwdbQueryFormat, KwdbQueryMode, MetricSpec } from '../../types';
 
 const MODE_OPTIONS: Array<{ label: string; value: KwdbQueryMode }> = [
@@ -63,9 +64,10 @@ function defaultsForMode(query: KwdbQuery, mode: KwdbQueryMode): Partial<KwdbQue
 interface Props {
   query: KwdbQuery;
   onChange: (query: KwdbQuery) => void;
+  datasource?: import('../../datasource').KwdbDataSource;
 }
 
-export function QueryEditorToolbar({ query, onChange }: Props) {
+export function QueryEditorToolbar({ query, onChange, datasource }: Props) {
   const onModeChange = (mode: KwdbQueryMode) => {
     const next = { ...query, ...defaultsForMode(query, mode) };
     if (mode === 'raw') {
@@ -107,6 +109,30 @@ export function QueryEditorToolbar({ query, onChange }: Props) {
           width={20}
           menuShouldPortal={false}
         />
+      </InlineField>
+      <InlineField
+        label="Ad Hoc table"
+        labelWidth={13}
+        tooltip="Table used to suggest keys and values for dashboard Ad Hoc filters. Builder queries default to their selected table."
+      >
+        {datasource ? (
+          <TableSelector
+            datasource={datasource}
+            value={query.adHocTable ?? query.table}
+            onChange={(adHocTable) => onChange({ ...query, adHocTable })}
+            ariaLabel="Ad Hoc table"
+            placeholder="Use query table"
+          />
+        ) : (
+          <Input
+            aria-label="Ad Hoc table"
+            value={query.adHocTable ?? ''}
+            onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+              onChange({ ...query, adHocTable: event.currentTarget.value })
+            }
+            width={40}
+          />
+        )}
       </InlineField>
     </Stack>
   );

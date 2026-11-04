@@ -42,6 +42,7 @@ func newMetadataHandler(querier rowQuerier, database string) backend.CallResourc
 	h := &metadataHandler{querier: querier, database: database}
 	mux.HandleFunc("/tables", h.handleTables)
 	mux.HandleFunc("/columns", h.handleColumns)
+	mux.HandleFunc("/tag-keys", h.handleTagKeys)
 	mux.HandleFunc("/tag-values", h.handleTagValues)
 	return httpadapter.New(mux)
 }
@@ -106,8 +107,81 @@ func (h *metadataHandler) handleColumns(w http.ResponseWriter, r *http.Request) 
 
 // loadTableColumns reads SHOW CREATE TABLE output for the given table and returns the parsed
 // column metadata. It is shared by /columns and /tag-values.
+// qualifiedTable renders a table reference for a statement. A name that already
+// contains a schema part (for example demo_ts.sensors) is used as written; only
+// a bare table name is prefixed with the configured database. Without this a
+// qualified name produced "db"."db.table" and the metadata request failed.
+func qualifiedTable(database, table string) string {
+	parts := splitTableName(table)
+	switch len(parts) {
+	case 0:
+		return quoteIdent(database) + "." + quoteIdent(table)
+	case 1:
+		return quoteIdent(database) + "." + quoteIdent(parts[0])
+	default:
+		quoted := make([]string, len(parts))
+		for i, part := range parts {
+			quoted[i] = quoteIdent(part)
+		}
+		return strings.Join(quoted, ".")
+	}
+}
+
+// splitTableName splits a possibly schema-qualified name on dots, honouring
+// double-quoted identifiers. An unbalanced quote returns the name unchanged as
+// a single part so it is quoted literally instead of being split wrongly.
+func splitTableName(name string) []string {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return nil
+	}
+	var parts []string
+	var current strings.Builder
+	inQuotes := false
+	for i := 0; i < len(trimmed); i++ {
+		switch c := trimmed[i]; c {
+		case '"':
+			if inQuotes && i+1 < len(trimmed) && trimmed[i+1] == '"' {
+				current.WriteByte('"')
+				i++
+				continue
+			}
+			inQuotes = !inQuotes
+		case '.':
+			if inQuotes {
+				current.WriteByte(c)
+				continue
+			}
+			parts = append(parts, strings.TrimSpace(current.String()))
+			current.Reset()
+		default:
+			current.WriteByte(c)
+		}
+	}
+	if inQuotes {
+		return []string{trimmed}
+	}
+	parts = append(parts, strings.TrimSpace(current.String()))
+	filtered := parts[:0]
+	for _, part := range parts {
+		if part != "" {
+			filtered = append(filtered, part)
+		}
+	}
+	return filtered
+}
+
 func (h *metadataHandler) loadTableColumns(ctx context.Context, table string) ([]ColumnInfo, error) {
-	rows, err := h.querier.Query(ctx, fmt.Sprintf("SHOW CREATE TABLE %s.%s", quoteIdent(h.database), quoteIdent(table)))
+	return loadTableColumns(ctx, h.querier, h.database, table)
+}
+
+// loadTableColumns reads and parses SHOW CREATE TABLE for `table`.
+//
+// It is a package-level function so the query path can reuse the exact catalog
+// read the Ad Hoc picker uses, which keeps "the picker offered this column" and
+// "the filter applies to this target" consistent.
+func loadTableColumns(ctx context.Context, querier rowQuerier, database, table string) ([]ColumnInfo, error) {
+	rows, err := querier.Query(ctx, "SHOW CREATE TABLE "+qualifiedTable(database, table))
 	if err != nil {
 		return nil, err
 	}
@@ -136,6 +210,38 @@ func (h *metadataHandler) loadTableColumns(ctx context.Context, table string) ([
 		return nil, fmt.Errorf("could not read SHOW CREATE TABLE output")
 	}
 	return parseDDL(ddl), nil
+}
+
+// handleTagKeys returns the tag columns of a table as Ad Hoc filter keys.
+//
+// Only tag columns are offered. A data column is not a usable Ad Hoc dimension:
+// its values are per-sample measurements, so the picker would offer thousands of
+// unrelated numbers, and reading them with DISTINCT scans the whole table.
+func (h *metadataHandler) handleTagKeys(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	table := r.URL.Query().Get("table")
+	if table == "" {
+		http.Error(w, "missing table query parameter", http.StatusBadRequest)
+		return
+	}
+
+	infos, err := h.loadTableColumns(r.Context(), table)
+	if err != nil {
+		http.Error(w, sanitizeError(err), http.StatusInternalServerError)
+		return
+	}
+
+	keys := []string{}
+	for _, info := range infos {
+		if info.IsTag && !info.IsTimeColumn {
+			keys = append(keys, info.Name)
+		}
+	}
+	writeJSON(w, keys)
 }
 
 func (h *metadataHandler) handleTagValues(w http.ResponseWriter, r *http.Request) {
@@ -173,8 +279,8 @@ func (h *metadataHandler) handleTagValues(w http.ResponseWriter, r *http.Request
 	}
 
 	sql := fmt.Sprintf(
-		"SELECT DISTINCT %s FROM %s.%s ORDER BY %s LIMIT %d",
-		quoteIdent(column), quoteIdent(h.database), quoteIdent(table), quoteIdent(column), tagValuesLimit,
+		"SELECT DISTINCT %s FROM %s ORDER BY %s LIMIT %d",
+		quoteIdent(column), qualifiedTable(h.database, table), quoteIdent(column), tagValuesLimit,
 	)
 	rows, err := h.querier.Query(r.Context(), sql)
 	if err != nil {

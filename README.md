@@ -242,6 +242,117 @@ millisecond dashboard ranges and KWDB's default `TIMESTAMP` precision is
 milliseconds (3 digits). Precision beyond milliseconds is therefore not
 available end to end; use a `TIMESTAMP(6)`/`TIMESTAMP(9)` column if you need it.
 
+## Template variables and Ad Hoc filters
+
+Dashboard and template variables are expanded before a query is sent to KWDB,
+for both **Raw SQL** and **Query Builder** targets. Time macros are deliberately
+left for the backend, because they only need the panel time range.
+
+```sql
+SELECT time_bucket(k_timestamp, '${interval}') AS time,
+       avg(ac_power_kw) AS ac_power_kw
+FROM station_telemetry
+WHERE $__timeFilter(k_timestamp)
+  AND station_id = '$station'
+GROUP BY time_bucket(k_timestamp, '${interval}')
+```
+
+The interpolation follows Grafana's SQL data source conventions:
+
+- A single string value is escaped but not quoted, so write the quotes in the
+  SQL as shown above.
+- A multi-value value becomes a quoted SQL list, for use in an `IN` clause:
+  `station_id IN ($station)`.
+- Numbers stay unquoted.
+- Variables inside SQL comments and PostgreSQL dollar-quoted strings are left untouched; variables inside ordinary SQL strings and quoted identifiers are expanded.
+
+### Custom `All` values
+
+`All` behaves like the SQL data sources shipped with Grafana. When the variable
+has **no** custom value, Grafana passes the option values and they are rendered
+as a normal quoted list, so `station_id IN ($station)` matches every station.
+
+When the variable **has** a custom _All_ value, that value is a raw SQL
+expression chosen by the dashboard author and is inserted unchanged. It must
+therefore be written for the position where it is used:
+
+```sql
+-- works: the pattern is a string literal
+SELECT ... FROM station_telemetry
+WHERE station_id LIKE '$station';
+
+-- fails: '*' is not a valid bare expression here
+SELECT ... FROM station_telemetry
+WHERE station_id = '$station';
+```
+
+This mirrors upstream Grafana SQL data sources; it is not a plugin-specific
+rule.
+
+### Escaping and explicit formats
+
+Values are escaped for their position: single quotes are doubled inside a
+literal, and a multi-value list is quoted per element. An **explicit format in
+the expression wins over this safeguard**, exactly as in Grafana's own SQL data
+sources: `${var:raw}` inserts the value with no escaping at all. Do not use
+`:raw` on a value that comes from an untrusted source. `${var:sqlstring}` also
+adds its own quotes, so it should not be wrapped in quotes in the SQL text.
+
+Ad Hoc filters on **Query Builder** targets are injected into the source
+`WHERE` clause before aggregation, so filtering happens on input rows even when
+the filtered tag is not selected in the output.
+
+For **Raw SQL** targets the filter is added to the source `WHERE` clause in the
+same way, so it applies before that statement's `GROUP BY`, `ORDER BY` and
+`LIMIT`:
+
+```sql
+SELECT station_id, avg(ac_power_kw)
+FROM station_telemetry
+WHERE /* kwdb_adhoc */ "station_id" = 'PV-A07' AND $__timeFilter(k_timestamp)
+GROUP BY station_id
+```
+
+The statement has to have a single top-level source table for this to be
+unambiguous. When it joins tables, uses several sources, puts its source in a
+subquery, or combines queries with `UNION`, the plugin **reports an error**
+instead of running the query unfiltered — a panel that silently ignored the
+dashboard filter would look like it found no matching data. Use the Query
+Builder, or move the condition into the SQL itself, for those statements.
+`SHOW` and `EXPLAIN` cannot be filtered either.
+
+Ad Hoc conditions are rendered after the statement has been interpolated and are
+quoted as literals, so a filter value may contain a dashboard variable without
+being escaped twice; a variable in a filter value that selects several options
+becomes an `IN (...)` list. `=`, `!=`, `=|`, `!=|`, `=~`, `!~`, `<`, `>`, `<=`,
+and `>=` are supported. Multiple values are combined with `IN` for `=`/`!=` and
+with `OR` for `=~`/`!~`; a comparison operator with several values is rejected
+rather than silently using only the first. The multi-value forms `=|` and `!=|`
+are only offered by Scenes-based dashboards; the classic picker lists the
+single-value operators only.
+
+Set **Ad Hoc table** in the query editor so the key and value pickers can read
+that table's tag columns; it is required for Raw SQL targets, whose statement
+does not name exactly one table. Query Builder targets default to their
+selected table. The picker only reads tables that declare the selected key, but
+that is a picker concern: it does not make query filtering per-table. Without
+any table, Raw SQL filters can still be typed manually.
+
+### Mixed-table dashboards
+
+A dashboard Ad Hoc filter is a request-level value in Grafana, so the same
+filter list reaches every panel in the request. The plugin therefore decides per
+target whether a filter applies: the frontend sends the filter together with the
+column it targets, and the backend keeps it only when **that target's table
+declares the column**. A panel reading a table without the filtered column is
+run untouched instead of failing with a missing-column error, so one dashboard
+can mix tables safely ([#80](https://github.com/KWDB/kwdb-grafana-plugin/issues/80)).
+
+The check reads `SHOW CREATE TABLE`, the same catalog the picker uses, and the
+result is cached for the request, so several panels over one table cost a single
+lookup. If the table cannot be read the query fails with that error rather than
+silently skipping the filter.
+
 ## Alerting and annotations
 
 The plugin declares Grafana Alerting and annotation support. Both use the same

@@ -8,9 +8,17 @@ interface Props {
   datasource: KwdbDataSource;
   value?: string;
   onChange: (table: string) => void;
+  ariaLabel?: string;
+  placeholder?: string;
 }
 
-export function TableSelector({ datasource, value, onChange }: Props) {
+export function TableSelector({
+  datasource,
+  value,
+  onChange,
+  ariaLabel = 'Table',
+  placeholder = 'Select table',
+}: Props) {
   const [state, setState] = useState<{ tables: TableInfo[]; loading: boolean }>({ tables: [], loading: true });
 
   useEffect(() => {
@@ -40,12 +48,16 @@ export function TableSelector({ datasource, value, onChange }: Props) {
 
   return (
     <Select<string>
-      aria-label="Table"
+      aria-label={ariaLabel}
       isLoading={state.loading}
       options={options}
-      value={value ? { label: selected ? (selected.type ? `${selected.name} (${selected.type})` : selected.name) : value, value } : undefined}
+      value={
+        value
+          ? { label: selected ? (selected.type ? `${selected.name} (${selected.type})` : selected.name) : value, value }
+          : undefined
+      }
       onChange={(item) => onChange(item?.value ?? '')}
-      placeholder="Select table"
+      placeholder={placeholder}
       isClearable
       menuShouldPortal={false}
       width={40}

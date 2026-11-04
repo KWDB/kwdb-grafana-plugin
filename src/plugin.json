@@ -4,6 +4,7 @@
   "name": "KWDB TSDB",
   "id": "kwdb-tsdb-datasource",
   "metrics": true,
+  "multiValueFilterOperators": true,
   "alerting": true,
   "annotations": true,
   "backend": true,
