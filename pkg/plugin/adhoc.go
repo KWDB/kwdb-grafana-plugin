@@ -324,4 +324,3 @@ func findTopLevelWhere(sql string) (whereLocation, bool) {
 	}
 	return whereLocation{offset: fromEnd}, true
 }
-
