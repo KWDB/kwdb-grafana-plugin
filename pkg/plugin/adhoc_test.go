@@ -161,8 +161,8 @@ func TestApplicableFiltersBuilderTargetUsesTableField(t *testing.T) {
 	catalog := &fakeCatalog{columns: map[string][]string{"sensors": {"ts", "device_id"}}}
 	d := &Datasource{}
 	qm := models.QueryModel{
-		Mode:       "downsampling",
-		Table:      "sensors",
+		Mode:  "downsampling",
+		Table: "sensors",
 		AdHocFilters: []models.AdHocFilter{
 			{Key: "device_id", Operator: "=", Condition: `"device_id" = '7'`},
 		},

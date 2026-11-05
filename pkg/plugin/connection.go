@@ -9,10 +9,10 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/KWDB/kwdb-grafana-plugin/pkg/models"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/KWDB/kwdb-grafana-plugin/pkg/models"
 )
 
 const (

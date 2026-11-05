@@ -69,6 +69,20 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Check Go formatting
+        if: steps.check-for-backend.outputs.has-backend == 'true'
+        # `golangci-lint` runs with `default: standard`, which does not include
+        # gofmt, so formatting drift used to pass CI unnoticed. `gofmt -l` prints
+        # the offending files and exits 0, hence the explicit non-empty check.
+        run: |
+          unformatted="$(gofmt -l ./pkg)"
+          if [ -n "${unformatted}" ]; then
+            echo "::error::These files are not gofmt-formatted:"
+            echo "${unformatted}"
+            echo "Run 'gofmt -w ./pkg' and commit the result."
+            exit 1
+          fi
+
       - name: Lint backend
         if: steps.check-for-backend.outputs.has-backend == 'true'
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
