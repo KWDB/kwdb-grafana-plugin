@@ -9,13 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/KWDB/kwdb-grafana-plugin/pkg/models"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 	"github.com/grafana/grafana-plugin-sdk-go/experimental/concurrent"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/KWDB/kwdb-grafana-plugin/pkg/models"
 )
 
 var (
