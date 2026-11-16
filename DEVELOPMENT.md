@@ -110,3 +110,24 @@ Both files are written by the `Package plugin` step in
 `.github/workflows/release.yml` and listed in the release notes. Keep the
 `.sha1` file when touching that step: dropping it breaks plugin registration
 even though the build and the validator still pass.
+
+## Gitee mirror
+
+`.github/workflows/gitee-sync.yml` mirrors every published release to
+<https://gitee.com/kwdb/kwdb-grafana-plugin> — the same tag, title, notes and
+assets — through `.github/scripts/sync_gitee_release.sh`. It runs as its own
+workflow so a failed or missed sync can be re-run, and an older tag backfilled,
+without rebuilding the release:
+
+```bash
+gh workflow run gitee-sync.yml -f tag=v1.4.1
+```
+
+The sync needs a `GITEE_TOKEN` repository secret: a Gitee personal access token
+(设置 → 私人令牌) with the `projects` scope. The token authenticates the Gitee
+release API and, only when the mirror is missing the tag, pushes that tag.
+Without the secret the workflow warns and skips instead of failing.
+
+Gitee caps release attachments at 100 MB per file. Larger assets are reported
+and skipped rather than failing the whole sync; raise `GITEE_MAX_ASSET_MB` in
+the workflow if the repository is ever granted the higher GVP limit.
