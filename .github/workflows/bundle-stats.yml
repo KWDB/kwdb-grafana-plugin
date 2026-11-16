@@ -26,7 +26,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: grafana/plugin-actions/bundle-size@bundle-size/v1.1.1
+      - uses: grafana/plugin-actions/bundle-size@bundle-size/v1.1.2
         with:
           # The action defaults to Node 22; the project requires 24, and it runs
           # `yarn install`, which treats an engine mismatch as a hard error.
