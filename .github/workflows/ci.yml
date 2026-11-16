@@ -102,7 +102,7 @@ jobs:
         run: go test ./pkg/...
 
       # Blocking again after the Go toolchain and x/net upgrades (go.mod now
-      # requires Go 1.26.10 and golang.org/x/net v0.60.0). Keep the tool version
+      # requires Go 1.26.11 and golang.org/x/net v0.60.0). Keep the tool version
       # pinned so a new govulncheck release cannot change the gate silently.
       - name: Scan backend dependencies for known vulnerabilities
         if: steps.check-for-backend.outputs.has-backend == 'true'
