@@ -157,16 +157,30 @@ release_id_by_tag() {
   jq -r '.id // empty' <<<"$HTTP_BODY" 2>/dev/null || true
 }
 
+# Gitee requires target_commitish when creating a release and expects a commit
+# SHA (the same value its tags API reports as commit.sha). GitHub fills
+# targetCommitish with the branch name for tag-based releases, which is both
+# the wrong shape and the wrong commit, so resolve the commit the tag points
+# at instead.
+target_commitish="$(git rev-parse --verify --quiet "refs/tags/${TAG}^{commit}" 2>/dev/null || true)"
+if [[ -z "$target_commitish" && "$target" =~ ^[0-9a-f]{40}$ ]]; then
+  target_commitish="$target"
+fi
+if [[ -z "$target_commitish" ]]; then
+  # The tag is not in this clone (shallow or tag-less checkout): fetch it.
+  git fetch --quiet origin "refs/tags/${TAG}:refs/tags/${TAG}" 2>/dev/null || true
+  target_commitish="$(git rev-parse --verify --quiet "refs/tags/${TAG}^{commit}" 2>/dev/null || true)"
+fi
+[[ -n "$target_commitish" ]] || die "cannot resolve the commit behind tag ${TAG}; Gitee requires target_commitish to create a release"
+
 create_release() {
-  # Extra curl arguments (e.g. --data-urlencode target_commitish=...) are
-  # forwarded by the caller.
   http -X POST "${API}/repos/${GITEE_OWNER}/${GITEE_REPO}/releases?${TOKEN_Q}" \
     -H "Accept: application/json" \
     --data-urlencode "tag_name=${TAG}" \
     --data-urlencode "name=${name}" \
     --data-urlencode "body=${body}" \
-    --data-urlencode "prerelease=${prerelease}" \
-    "$@"
+    --data-urlencode "target_commitish=${target_commitish}" \
+    --data-urlencode "prerelease=${prerelease}"
 }
 
 release_id="$(release_id_by_tag)"
@@ -176,26 +190,18 @@ if [[ -n "$release_id" ]]; then
     -H "Accept: application/json" \
     --data-urlencode "name=${name}" \
     --data-urlencode "body=${body}" \
+    --data-urlencode "target_commitish=${target_commitish}" \
     --data-urlencode "prerelease=${prerelease}"
   ok || die "failed to refresh the Gitee release: HTTP ${HTTP_CODE} ${HTTP_BODY}"
 else
-  log "creating release ${TAG} on Gitee"
-  if [[ "$target" =~ ^[0-9a-f]{40}$ ]]; then
-    create_release --data-urlencode "target_commitish=${target}"
-  else
-    create_release
-  fi
+  log "creating release ${TAG} on Gitee (target ${target_commitish})"
+  create_release
   if ! ok; then
-    # Gitee refuses to create a release for a tag it already knows when
-    # target_commitish is passed, so retry without it and look the release up
-    # again before giving up.
-    log "create attempt failed (HTTP ${HTTP_CODE}: ${HTTP_BODY}); retrying without target_commitish"
-    create_release
-    if ! ok; then
-      release_id="$(release_id_by_tag)"
-      [[ -n "$release_id" ]] || die "failed to create the Gitee release: HTTP ${HTTP_CODE} ${HTTP_BODY}"
-      log "release ${TAG} already existed on Gitee (id ${release_id})"
-    fi
+    # The release may already exist on Gitee (an earlier run, or one created
+    # by hand); reuse it instead of failing the sync.
+    release_id="$(release_id_by_tag)"
+    [[ -n "$release_id" ]] || die "failed to create the Gitee release: HTTP ${HTTP_CODE} ${HTTP_BODY}"
+    log "release ${TAG} already existed on Gitee (id ${release_id})"
   fi
   [[ -n "$release_id" ]] || release_id="$(jq -r '.id // empty' <<<"$HTTP_BODY" 2>/dev/null || true)"
 fi
