@@ -1,0 +1,57 @@
+# Mirrors a published GitHub release to the Gitee repository
+# (https://gitee.com/kwdb/kwdb-grafana-plugin): the same tag, title, release
+# notes and assets. It is a separate workflow rather than a step in
+# release.yml so that a failed or missed sync can be re-run, and an older tag
+# backfilled, without rebuilding the release.
+#
+# Requires a GITEE_TOKEN repository secret: a Gitee personal access token
+# (设置 -> 私人令牌) with the `projects` scope. Without it the job warns and
+# skips instead of failing the release.
+name: Gitee release sync
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to sync, e.g. v1.4.1'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # Exposed at job level so the sync step can test it in `if:`, the same
+    # pattern the signing step uses.
+    env:
+      GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          # The script pushes the tag to Gitee when the mirror does not have
+          # it yet, which needs every object reachable from that tag.
+          fetch-depth: 0
+
+      - name: Notice when GITEE_TOKEN is not configured
+        if: ${{ env.GITEE_TOKEN == '' }}
+        run: echo "::warning::GITEE_TOKEN is not configured; the release was not mirrored to Gitee."
+
+      - name: Sync release to Gitee
+        if: ${{ env.GITEE_TOKEN != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag || github.event.release.tag_name }}"
+          .github/scripts/sync_gitee_release.sh \
+            --tag "${TAG}" \
+            --github-owner "${{ github.repository_owner }}" \
+            --github-repo "${{ github.event.repository.name }}" \
+            --gitee-owner kwdb \
+            --gitee-repo kwdb-grafana-plugin
