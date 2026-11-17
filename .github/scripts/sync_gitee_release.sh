@@ -81,16 +81,16 @@ TOKEN="${TOKEN_ARG:-${GITEE_TOKEN:-${GITEE_ACCESS_TOKEN:-}}}"
 MAX_ASSET_MB="${GITEE_MAX_ASSET_MB:-100}"
 
 API="https://gitee.com/api/v5"
-GITEE_HTTPS="https://gitee.com/${GITEE_OWNER}/${GITEE_REPO}.git"
 TOKEN_Q="access_token=$(printf '%s' "$TOKEN" | jq -sRr @uri)"
 
 HTTP_CODE=""
 HTTP_BODY=""
 
 # Runs curl, capturing the body in HTTP_BODY and the status in HTTP_CODE.
+# Timeouts keep a stalled Gitee connection from hanging the workflow forever.
 http() {
   local out
-  out="$(curl -sS -w $'\n%{http_code}' "$@")"
+  out="$(curl -sS --connect-timeout 30 --max-time 180 -w $'\n%{http_code}' "$@")"
   HTTP_BODY="${out%$'\n'*}"
   HTTP_CODE="${out##*$'\n'}"
 }
@@ -117,7 +117,7 @@ prerelease="$(jq -r '.isPrerelease' <<<"$release_json")"
 # as "tag missing" (that would trigger a doomed push).
 gitee_tag_ref() {
   local out
-  if ! out="$(GIT_TERMINAL_PROMPT=0 git ls-remote "$GITEE_HTTPS" "refs/tags/${TAG}" 2>&1)"; then
+  if ! out="$(GIT_TERMINAL_PROMPT=0 git ls-remote "https://oauth2:${TOKEN}@gitee.com/${GITEE_OWNER}/${GITEE_REPO}.git" "refs/tags/${TAG}" 2>&1)"; then
     die "git ls-remote against Gitee failed (check GITEE_TOKEN and network): ${out}"
   fi
   printf '%s' "$out" | awk '{ print $1 }' | head -n1
@@ -192,7 +192,9 @@ if [[ -n "$release_id" ]]; then
     --data-urlencode "body=${body}" \
     --data-urlencode "target_commitish=${target_commitish}" \
     --data-urlencode "prerelease=${prerelease}"
-  ok || die "failed to refresh the Gitee release: HTTP ${HTTP_CODE} ${HTTP_BODY}"
+  # A failed refresh must not block the asset sync: the notes can be updated
+  # by hand or by a later run, but a missing archive breaks installs.
+  ok || echo "[gitee-sync] WARNING: could not refresh the Gitee release notes: HTTP ${HTTP_CODE} ${HTTP_BODY}" >&2
 else
   log "creating release ${TAG} on Gitee (target ${target_commitish})"
   create_release
@@ -226,12 +228,25 @@ gh release download "$TAG" -R "${GH_OWNER}/${GH_REPO}" -D "$tmp_dir" --pattern "
 
 uploaded=0
 skipped=0
-shopt -s nullglob
-for file in "$tmp_dir"/*; do
-  [[ -f "$file" ]] || continue
+
+file_size() {
+  stat -c%s "$1" 2>/dev/null || stat -f%z "$1"
+}
+
+# Small files first. Gitee attachments upload slowly from overseas runners,
+# and the checksums must not queue behind a multi-minute archive upload: if
+# the big file then stalls, at least the digests are already mirrored.
+upload_list=()
+while IFS= read -r f; do
+  [[ -n "$f" ]] && upload_list+=("$f")
+done < <(for f in "$tmp_dir"/*; do
+           [[ -f "$f" ]] || continue
+           printf '%s\t%s\n' "$(file_size "$f")" "$f"
+         done | sort -n | cut -f2-)
+
+for file in ${upload_list[@]+"${upload_list[@]}"}; do
   filename="$(basename "$file")"
-  bytes="$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file")"
-  size_mb=$(( (bytes + 1048575) / 1048576 ))
+  size_mb=$(( ($(file_size "$file") + 1048575) / 1048576 ))
   # Gitee caps release attachments at 100 MB per file (200 MB for GVP
   # projects). Skipping keeps the metadata and checksums mirrored instead of
   # failing the whole sync over one oversized archive.
@@ -244,10 +259,28 @@ for file in "$tmp_dir"/*; do
     skipped=$(( skipped + 1 ))
     continue
   fi
-  http -X POST "${API}/repos/${GITEE_OWNER}/${GITEE_REPO}/releases/${release_id}/attach_files?${TOKEN_Q}" \
-    -F "file=@${file}"
-  ok || die "failed to upload ${filename}: HTTP ${HTTP_CODE} ${HTTP_BODY}"
-  log "${filename}: uploaded"
+  attempt=1
+  upload_code=""
+  upload_body=""
+  while (( attempt <= 2 )); do
+    # --speed-limit/--speed-time abort a connection that trickles or stalls
+    # instead of hanging the job; --max-time is the hard ceiling. `Expect:`
+    # disables curl's 100-continue wait, which some servers never answer.
+    upload_resp="$(curl -sS --connect-timeout 30 --speed-limit 2048 --speed-time 120 \
+      --max-time 1800 -H 'Expect:' -w $'\n%{http_code}' \
+      -X POST "${API}/repos/${GITEE_OWNER}/${GITEE_REPO}/releases/${release_id}/attach_files?${TOKEN_Q}" \
+      -F "file=@${file}")"
+    upload_code="${upload_resp##*$'\n'}"
+    upload_body="${upload_resp%$'\n'*}"
+    if [[ "$upload_code" == 2* ]]; then
+      break
+    fi
+    echo "[gitee-sync] WARNING: ${filename} attempt ${attempt} failed (HTTP ${upload_code}: ${upload_body})" >&2
+    attempt=$(( attempt + 1 ))
+    (( attempt <= 2 )) && sleep 10
+  done
+  [[ "$upload_code" == 2* ]] || die "failed to upload ${filename} after 2 attempts: HTTP ${upload_code} ${upload_body}"
+  log "${filename}: uploaded (${size_mb} MB)"
   uploaded=$(( uploaded + 1 ))
 done
 
