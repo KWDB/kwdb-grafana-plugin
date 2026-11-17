@@ -188,6 +188,7 @@ if [[ -n "$release_id" ]]; then
   log "release ${TAG} already exists on Gitee (id ${release_id}); refreshing name and notes"
   http -X PATCH "${API}/repos/${GITEE_OWNER}/${GITEE_REPO}/releases/${release_id}?${TOKEN_Q}" \
     -H "Accept: application/json" \
+    --data-urlencode "tag_name=${TAG}" \
     --data-urlencode "name=${name}" \
     --data-urlencode "body=${body}" \
     --data-urlencode "target_commitish=${target_commitish}" \
@@ -280,7 +281,11 @@ for file in ${upload_list[@]+"${upload_list[@]}"}; do
     (( attempt <= 2 )) && sleep 10
   done
   [[ "$upload_code" == 2* ]] || die "failed to upload ${filename} after 2 attempts: HTTP ${upload_code} ${upload_body}"
-  log "${filename}: uploaded (${size_mb} MB)"
+  if (( size_mb >= 1 )); then
+    log "${filename}: uploaded (${size_mb} MB)"
+  else
+    log "${filename}: uploaded ($(file_size "$file") bytes)"
+  fi
   uploaded=$(( uploaded + 1 ))
 done
 
