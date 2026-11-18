@@ -839,14 +839,14 @@
   dependencies:
     "@formatjs/fast-memoize" "3.1.7"
 
-"@grafana/data@13.3.0":
-  version "13.3.0"
-  resolved "https://registry.yarnpkg.com/@grafana/data/-/data-13.3.0.tgz#24d0f674168a2b1be6c1e75ec757456540f990d3"
-  integrity sha512-w3GGGQZroR/FGxVId6UP+RFp7C3kR6sCh0fDvjLwDn88EkbjRWRzrNimlogy03KN/JarLXJID9CrZJeQeWTS/Q==
+"@grafana/data@13.3.1":
+  version "13.3.1"
+  resolved "https://registry.yarnpkg.com/@grafana/data/-/data-13.3.1.tgz#7f0bd5f10b7e3f3d38c83946017ef4c49174cb24"
+  integrity sha512-KdWFGYIA64wK9MEYE7RgC3SDZvZrfOsc03mcfrN0oH6ZI0ZuB21kntyw+KsYnWoto9aXuhKaWt0RyhENZ3Tv5A==
   dependencies:
     "@braintree/sanitize-url" "^7.0.1"
-    "@grafana/i18n" "13.3.0"
-    "@grafana/schema" "13.3.0"
+    "@grafana/i18n" "13.3.1"
+    "@grafana/schema" "13.3.1"
     "@leeoniya/ufuzzy" "^1.0.19"
     "@react-hookz/web" "^25.2.0"
     "@types/d3-interpolate" "^3.0.0"
@@ -862,7 +862,7 @@
     lodash "^4.17.23"
     marked "^16.3.0"
     marked-mangle "^1.1.12"
-    moment-timezone "^0.6.0"
+    moment-timezone "^0.6.6"
     ol "^10.7.0"
     papaparse "^5.5.3"
     react-use "^17.6.1"
@@ -873,10 +873,10 @@
     xss "^1.0.14"
     zod "^4.3.0"
 
-"@grafana/e2e-selectors@13.3.0":
-  version "13.3.0"
-  resolved "https://registry.yarnpkg.com/@grafana/e2e-selectors/-/e2e-selectors-13.3.0.tgz#44f8bee8b28cd415ac829b1b5cf3564294d844b7"
-  integrity sha512-WEEwaTlbyMyrAkkKsHCxboi4TD5xxZ3pGnkMLPy4Fh++59YoyV1dHpqhtF9gchpLyCl4zk/BGAd1JRvMXUKENQ==
+"@grafana/e2e-selectors@13.3.1":
+  version "13.3.1"
+  resolved "https://registry.yarnpkg.com/@grafana/e2e-selectors/-/e2e-selectors-13.3.1.tgz#067c343301dbdf5c82ed09cd21165ef6253dd5b4"
+  integrity sha512-bmBWYbTBEOh9fJmlVl+lQw2xLDfSdEIvvSbKKxncKO4RcLgtF6u9Uu+cig+tua4JZZvTRNFNGNi8zNmoag6hjQ==
   dependencies:
     semver "^7.7.0"
 
@@ -902,10 +902,10 @@
     ua-parser-js "1.0.41"
     web-vitals "^6.0.0"
 
-"@grafana/i18n@13.3.0":
-  version "13.3.0"
-  resolved "https://registry.yarnpkg.com/@grafana/i18n/-/i18n-13.3.0.tgz#5555025153ddd0a53db6b92bc98017396a777806"
-  integrity sha512-cEuLooRVaVBG5j8OFhR8Eo9ex0+/WZgtxlPpFWSkFcV4bB4qcveGBShm3WAKrDLSH/nuQUFXNlfTZXtiJWjTcA==
+"@grafana/i18n@13.3.1":
+  version "13.3.1"
+  resolved "https://registry.yarnpkg.com/@grafana/i18n/-/i18n-13.3.1.tgz#fc695cdab05ea9167fef1cf920573a2206a7e75b"
+  integrity sha512-MeFrAW9/HHj3h+xqV7KTmpYvqXqHOKnhvSt1nrtPWpxRVeNTjVlKSnInJiaBfrkqKj/B2FrP2HPNxSGsUdc+sQ==
   dependencies:
     "@formatjs/intl-durationformat" "^0.11.0"
     "@typescript-eslint/utils" "^8.33.1"
@@ -928,16 +928,16 @@
   resolved "https://registry.yarnpkg.com/@grafana/react-data-grid/-/react-data-grid-7.0.0-beta.60.tgz#789543d81ff41a47a76301f0959231f51c30ff61"
   integrity sha512-i/IyHgORMLJHwA7KeqhB0zOzIOFyfltoycNDzdG9089SKH62A1hTQyLl7Vxd68nWzsBbu+suB9SWwKCsomHEjg==
 
-"@grafana/runtime@13.3.0":
-  version "13.3.0"
-  resolved "https://registry.yarnpkg.com/@grafana/runtime/-/runtime-13.3.0.tgz#93ee65e710666b80b657086fa0ef465afc701b8f"
-  integrity sha512-Kmtc4jdBVoEuoBqJy6R65yNuf+P7CLyeeT00UzQOFJCjPQ6Ey2YIFYWJPeUlBdR3kDjlTlbv4FgVDRDDY+/p1g==
+"@grafana/runtime@13.3.1":
+  version "13.3.1"
+  resolved "https://registry.yarnpkg.com/@grafana/runtime/-/runtime-13.3.1.tgz#e64c9576b93ad852ece2c873c3f6516d3d363d3b"
+  integrity sha512-55oLJdBWJbfKZeszEv+Yl1rhuxghHeQ0fqgGeewUuJVrVTiawJ1yoExaXSkg5IJjQtipviDNyfFEdh1a2oFdNw==
   dependencies:
-    "@grafana/data" "13.3.0"
-    "@grafana/e2e-selectors" "13.3.0"
+    "@grafana/data" "13.3.1"
+    "@grafana/e2e-selectors" "13.3.1"
     "@grafana/faro-web-sdk" "^2.12.0"
-    "@grafana/schema" "13.3.0"
-    "@grafana/ui" "13.3.0"
+    "@grafana/schema" "13.3.1"
+    "@grafana/ui" "13.3.1"
     "@openfeature/core" "^1.12.0"
     "@openfeature/localstorage-provider" "^0.1.2"
     "@openfeature/ofrep-web-provider" "^0.4.1"
@@ -952,10 +952,10 @@
     react-use "^17.6.1"
     rxjs "^7.8.2"
 
-"@grafana/schema@13.3.0":
-  version "13.3.0"
-  resolved "https://registry.yarnpkg.com/@grafana/schema/-/schema-13.3.0.tgz#470a9ba769437e1b959ec210efa69d6f0810be78"
-  integrity sha512-IkxSmRiOOnc8GXg3vPlWshtcxPd0SHv8AbPQi04PIb05v/5LjiIQCpeYXemtIAlRg6IhklzF2u7LQcDGHQElJg==
+"@grafana/schema@13.3.1":
+  version "13.3.1"
+  resolved "https://registry.yarnpkg.com/@grafana/schema/-/schema-13.3.1.tgz#7494867e5a86e4b00bc4ff6e19a547071996fa32"
+  integrity sha512-MsU6vLEm39rH8x+rMB/xiUKKLEtXrlhnGauaHLPBy5R0V25ZlMZeu7YwA7p2w3WrmGAw6GPkz9zHTApgW7JuyQ==
 
 "@grafana/sign-plugin@^4.0.0":
   version "4.0.0"
@@ -969,10 +969,10 @@
   resolved "https://registry.npmmirror.com/@grafana/tsconfig/-/tsconfig-2.2.0.tgz#b1d6395ec4dd81af18fd87144504208c1a8b571c"
   integrity sha512-hhhXetqhSKTfgErStfWVPhqo4JPi+lNqBJNhBF6RT4ZIM4vwKxEfnfsyswT+NwHIXNrOz23xoOGeKWPpxmaHWQ==
 
-"@grafana/ui@13.3.0":
-  version "13.3.0"
-  resolved "https://registry.yarnpkg.com/@grafana/ui/-/ui-13.3.0.tgz#ee658f5acbff70e6f165a47a02b375dd2c2ece8d"
-  integrity sha512-1jC8T7ua4EMgRySupuO8h7v9uhQXlBrjFDdcrU5g8u73acLGZL8tKtxQsh/oCe65IPQFMwSCH6WGyFlcXRgC4g==
+"@grafana/ui@13.3.1":
+  version "13.3.1"
+  resolved "https://registry.yarnpkg.com/@grafana/ui/-/ui-13.3.1.tgz#7cf5607c009cc84eeb3796d084e08badc61e1fe6"
+  integrity sha512-oYyiXL6eoYHvGdEhIB6ya9B9UfEDxdG6HoN3s/oq5TIi4Puejq0q0kCm3LOZ6kJ+IceNanh9qeaVomTvyr7QsA==
   dependencies:
     "@codemirror/autocomplete" "^6.20.1"
     "@codemirror/lang-go" "^6.0.1"
@@ -991,12 +991,12 @@
     "@emotion/react" "^11.14.0"
     "@emotion/serialize" "^1.3.3"
     "@floating-ui/react" "^0.27.19"
-    "@grafana/data" "13.3.0"
-    "@grafana/e2e-selectors" "13.3.0"
+    "@grafana/data" "13.3.1"
+    "@grafana/e2e-selectors" "13.3.1"
     "@grafana/faro-web-sdk" "^2.12.0"
-    "@grafana/i18n" "13.3.0"
+    "@grafana/i18n" "13.3.1"
     "@grafana/react-data-grid" "7.0.0-beta.60"
-    "@grafana/schema" "13.3.0"
+    "@grafana/schema" "13.3.1"
     "@hello-pangea/dnd" "^18.0.1"
     "@lezer/highlight" "^1.2.5"
     "@monaco-editor/react" "^4.7.0"
@@ -3229,7 +3229,7 @@ baseline-browser-mapping@^2.10.44:
   resolved "https://registry.npmmirror.com/baseline-browser-mapping/-/baseline-browser-mapping-2.11.12.tgz#42ac48770bf73d292f60ce8ba4dc5e7ebb242ec3"
   integrity sha512-r7WnVImvVCeFpf2DOXfy41aPWzeNg3H/A2X4dKmy1QL0MSyyk/e7z8ihJ3N6Nn2PsdhkVlqnEfnUE4a05P2aTA==
 
-basic-ftp@^6.2.3:
+basic-ftp@^6.2.6:
   version "6.2.6"
   resolved "https://registry.yarnpkg.com/basic-ftp/-/basic-ftp-6.2.6.tgz#84905c94db0e10415c9ba4ce61b30bc38875905a"
   integrity sha512-0EjZCaodOz6yiokv2JA1VyKGNdGxULZ+GGlPgG9tm4d+T/bHtX1hUch8CumDneBfpIbiSdn7TaCGwpM+gwsOlw==
@@ -5955,7 +5955,7 @@ minimizer-webpack-plugin@^5.13.0:
   resolved "https://registry.npmmirror.com/minipass/-/minipass-7.1.3.tgz#79389b4eb1bb2d003a9bba87d492f2bd37bdc65b"
   integrity sha512-tEBHqDnIoM/1rXME1zgka9g6Q2lcoCkxHLuc7ODJ5BxbP5d4c2Z5cGgtXAku59200Cx7diuHTOYfSBD8n6mm8A==
 
-moment-timezone@^0.6.0:
+moment-timezone@^0.6.6:
   version "0.6.6"
   resolved "https://registry.yarnpkg.com/moment-timezone/-/moment-timezone-0.6.6.tgz#a2f6fe85002ef199645f96b1e94842897158bf8a"
   integrity sha512-LF5AAYsMduXFW2ungr/D9JqNq9ykZyhWgYG6wFtdGZW5ZlBDTBgTUFqW8EC7Fa+Dvs3IMZxlWkSR09sW2D/+0w==
