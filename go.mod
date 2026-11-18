@@ -4,7 +4,7 @@ go 1.26.11
 
 require github.com/grafana/grafana-plugin-sdk-go v0.298.0
 
-require github.com/jackc/pgx/v5 v5.12.0
+require github.com/jackc/pgx/v5 v5.13.0
 
 require (
 	github.com/BurntSushi/toml v1.6.0 // indirect
