@@ -18,7 +18,7 @@ This plugin connects [Grafana](https://grafana.com) to KWDB. It executes read-on
 
 ## Quick start
 
-1. Install the plugin and add a `KWDB TSDB` data source.
+1. [Install the plugin](#installation) and add a `KWDB TSDB` data source.
 2. Configure the KWDB host, port, database, user, and password.
 3. Click **Save & test**.
 4. Create a dashboard and add a panel using the KWDB data source.
@@ -32,9 +32,88 @@ This plugin connects [Grafana](https://grafana.com) to KWDB. It executes read-on
 
 ## Installation
 
-- **From the Grafana plugin catalog:** install `kwdb-tsdb-datasource`, then add a `KWDB TSDB` data source.
-- **With grafana-cli:** `grafana-cli plugins install kwdb-tsdb-datasource`, then restart Grafana.
-- **From a ZIP:** build and sign the plugin, rename `dist` to the plugin ID, create a ZIP, and extract it into Grafana's plugin directory. See the [packaging guide](https://grafana.com/developers/plugin-tools/publish-a-plugin/package-a-plugin).
+The plugin ships as a ZIP archive on the [GitHub releases page](https://github.com/KWDB/kwdb-grafana-plugin/releases). Each release contains `kwdb-tsdb-datasource-<version>.zip` (frontend, backend binaries for Linux/macOS/Windows, manifest) plus `.sha1` and `.sha256` digests.
+
+Releases are currently **unsigned**, because the signing step in the release workflow is skipped without `GRAFANA_ACCESS_POLICY_TOKEN`. Grafana refuses to load an unsigned plugin until its ID is on the unsigned-plugin allow list, so complete step 1 first.
+
+### 1. Allow the unsigned plugin
+
+The plugin ID is `kwdb-tsdb-datasource`. Use whichever option matches your install:
+
+- **DEB/RPM package (systemd):** add to the environment file (`/etc/default/grafana-server` on Debian/Ubuntu, `/etc/sysconfig/grafana-server` on RHEL/Rocky; confirm with `systemctl cat grafana-server`):
+
+  ```bash
+  GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=kwdb-tsdb-datasource
+  ```
+
+- **grafana.ini:**
+
+  ```ini
+  [plugins]
+  allow_loading_unsigned_plugins = kwdb-tsdb-datasource
+  ```
+
+- **Docker:** pass `-e GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=kwdb-tsdb-datasource`.
+
+Restart Grafana after changing any of these.
+
+### 2. Install the ZIP
+
+Download the release and verify it. The commands below use `v1.4.1` as an example; substitute the version you are installing:
+
+```bash
+cd /tmp
+curl -LO https://github.com/KWDB/kwdb-grafana-plugin/releases/download/v1.4.1/kwdb-tsdb-datasource-1.4.1.zip
+curl -LO https://github.com/KWDB/kwdb-grafana-plugin/releases/download/v1.4.1/kwdb-tsdb-datasource-1.4.1.zip.sha256
+sha256sum -c kwdb-tsdb-datasource-1.4.1.zip.sha256
+```
+
+**Option A — `grafana-cli` from the release URL (recommended).** The supported path while the plugin is not in the Grafana catalog; it handles the download, checksum and directory layout:
+
+```bash
+sudo grafana-cli plugins install 1.4.1 \
+  --pluginUrl https://github.com/KWDB/kwdb-grafana-plugin/releases/download/v1.4.1/kwdb-tsdb-datasource-1.4.1.zip
+```
+
+The version argument must match `info.version` inside the archive.
+
+**Option B — manual unzip** (offline machines). The default plugin directory is `/var/lib/grafana/plugins`; check `[paths] plugins` in `grafana.ini` if yours differs:
+
+```bash
+cd /var/lib/grafana/plugins
+sudo unzip -o /tmp/kwdb-tsdb-datasource-1.4.1.zip
+sudo chmod +x kwdb-tsdb-datasource/gpx_*
+```
+
+Two details decide whether Grafana finds the plugin at all:
+
+- The directory must be named exactly `kwdb-tsdb-datasource`, matching the plugin ID. The archive already contains that top-level directory, so unpack it into the plugin root rather than nesting it in another folder of the same name.
+- The backend binary needs the execute bit, which a zip can lose when copied across filesystems.
+
+### 3. Restart and verify
+
+```bash
+sudo systemctl restart grafana-server
+sudo grafana-cli plugins ls
+sudo journalctl -u grafana-server -n 50 | grep -i plugin
+```
+
+No `unsigned` rejection or `plugin not found` in the log, and **KWDB TSDB** appears under **Connections > Data sources**.
+
+### Upgrading and uninstalling
+
+Remove the directory and install again; never overwrite a plugin directory in place:
+
+```bash
+sudo rm -rf /var/lib/grafana/plugins/kwdb-tsdb-datasource
+# reinstall, then restart Grafana
+```
+
+Uninstalling is the same command without the reinstall step.
+
+### Once the plugin is in the Grafana catalog
+
+After the plugin is published and signed, the allow list is no longer needed and installation collapses to `grafana-cli plugins install kwdb-tsdb-datasource` followed by a restart. Until then, use the release ZIP with `allow_loading_unsigned_plugins` set.
 
 ## Configuration
 
@@ -143,7 +222,7 @@ Read-only access is enforced in three layers:
 - Plugin ID: `kwdb-tsdb-datasource`. It follows the `org-name-type` convention the
   catalog validator enforces (at least three hyphen-separated parts), where
   `kwdb` is the Grafana Cloud organization slug.
-- First submissions do not require a signature. After review, versions are signed and released through the `Release` GitHub Actions workflow.
+- First submissions do not require a signature. Releases published today are **unsigned** because the workflow's signing step is skipped without `GRAFANA_ACCESS_POLICY_TOKEN`, so users must add the plugin ID to `allow_loading_unsigned_plugins` (see [Installation](#installation)). Once a Grafana signature exists, releases are signed and the allow list is no longer needed.
 - Full instructions are in the [Grafana plugin publishing guide](https://grafana.com/developers/plugin-tools/publish-a-plugin).
 
 ## Support

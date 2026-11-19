@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Changed
+
+- Installation documentation now describes the real path for an unsigned
+  release: allow the plugin ID via `allow_loading_unsigned_plugins`, install the
+  release ZIP (preferably `grafana-cli plugins install <version> --pluginUrl
+<release zip>`), then restart and verify. Both `README.md` and the packaged
+  `src/README.md` are updated; the previous instructions assumed a signed
+  catalog publication and a local build.
+
 ### Added
 
 - Dashboard Ad Hoc filters are applied before aggregation for Query Builder
