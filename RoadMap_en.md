@@ -4,9 +4,11 @@ This file tracks the development plan for the KWDB TSDB Grafana data source plug
 
 ## Current version
 
-**v1.4.1** — released (2026-10-29), awaiting review for the Grafana plugin catalog.
+**v1.5.0** — released (2026-11-19), awaiting review for the Grafana plugin catalog. Artifacts are unsigned (no `GRAFANA_ACCESS_POLICY_TOKEN` in the repository), so users must allow the unsigned plugin as described in the README.
 
-v1.4.x is a catalog-readiness line: it contains no feature or UX changes relative to v1.3.0. The work went into the plugin ID, the release pipeline and dependency upgrades — the ID is now `kwdb-tsdb-datasource`, in the three-part `org-name-type` form the validator requires, and the repository lives under the `KWDB` organization. The feature baseline is still v1.3.0.
+v1.5.0 is a feature release after v1.4.1: Ad Hoc filters are now applied per target table together with template variable interpolation, the downsampling **Interval** control gained `Auto`/variable modes and the data source form was reworked, latest-value queries over an empty range are fixed, and Go-side and frontend dependency security advisories (GO-2026-6859, GO-2026-6865, basic-ftp) are cleared. The release pipeline gained Gitee release mirroring.
+
+v1.4.x is a catalog-readiness line: it contains no feature or UX changes relative to v1.3.0. The work went into the plugin ID, the release pipeline and dependency upgrades — the ID is now `kwdb-tsdb-datasource`, in the three-part `org-name-type` form the validator requires, and the repository lives under the `KWDB` organization. The feature baseline before v1.4.x is v1.3.0.
 
 Shipped capabilities: five query editor modes (downsampling, gapfill interpolation, latest values, window/event, raw SQL), Grafana standard time macros, three layers of read-only protection, full KWDB time-series feature coverage (`time_bucket`, `time_bucket_gapfill` with five interpolation modes, four latest-value functions, five window functions), four TLS modes, 13 configurable connection parameters, table/column/tag-value browsing, query template variables, a 100,000 row per frame cap with a truncation notice, and full end-to-end verification against a real KWDB instance (including the TLS scenarios).
 
