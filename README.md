@@ -93,14 +93,14 @@ Restart Grafana after changing any of these.
 ### 2. Install the plugin ZIP
 
 First download the archive for the version you want, and verify it. The
-commands below use `v1.4.1` as an example; substitute the version you are
+commands below use `v1.5.0` as an example; substitute the version you are
 installing:
 
 ```bash
 cd /tmp
-curl -LO https://github.com/KWDB/kwdb-grafana-plugin/releases/download/v1.4.1/kwdb-tsdb-datasource-1.4.1.zip
-curl -LO https://github.com/KWDB/kwdb-grafana-plugin/releases/download/v1.4.1/kwdb-tsdb-datasource-1.4.1.zip.sha256
-sha256sum -c kwdb-tsdb-datasource-1.4.1.zip.sha256
+curl -LO https://github.com/KWDB/kwdb-grafana-plugin/releases/download/v1.5.0/kwdb-tsdb-datasource-1.5.0.zip
+curl -LO https://github.com/KWDB/kwdb-grafana-plugin/releases/download/v1.5.0/kwdb-tsdb-datasource-1.5.0.zip.sha256
+sha256sum -c kwdb-tsdb-datasource-1.5.0.zip.sha256
 ```
 
 **Option A — `grafana-cli` from the release URL (recommended).** This is the
@@ -108,8 +108,8 @@ supported path for a plugin that is not in the Grafana catalog yet; it handles
 the download, the checksum and the directory layout:
 
 ```bash
-sudo grafana-cli plugins install 1.4.1 \
-  --pluginUrl https://github.com/KWDB/kwdb-grafana-plugin/releases/download/v1.4.1/kwdb-tsdb-datasource-1.4.1.zip
+sudo grafana-cli plugins install 1.5.0 \
+  --pluginUrl https://github.com/KWDB/kwdb-grafana-plugin/releases/download/v1.5.0/kwdb-tsdb-datasource-1.5.0.zip
 ```
 
 The version argument must match `info.version` inside the archive.
@@ -120,7 +120,7 @@ differs:
 
 ```bash
 cd /var/lib/grafana/plugins
-sudo unzip -o /tmp/kwdb-tsdb-datasource-1.4.1.zip
+sudo unzip -o /tmp/kwdb-tsdb-datasource-1.5.0.zip
 sudo chmod +x kwdb-tsdb-datasource/gpx_*
 ```
 
