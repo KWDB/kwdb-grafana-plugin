@@ -24,7 +24,7 @@ protocol and renders results as Grafana time series or table data.
 
 ## Quick Start
 
-1. Install the plugin and add a `KWDB TSDB` data source.
+1. [Install the plugin](#installation) and add a `KWDB TSDB` data source.
 2. Configure the KWDB host, port, database, user, and password.
 3. Click **Save & test**.
 4. Create a dashboard and add a panel using the KWDB data source.
@@ -44,31 +44,135 @@ protocol and renders results as Grafana time series or table data.
 
 ## Installation
 
-### Grafana plugin catalog
+The plugin ships as a ZIP archive on the
+[GitHub releases page](https://github.com/KWDB/kwdb-grafana-plugin/releases).
+Every release contains:
 
-Install `kwdb-tsdb-datasource` from the Grafana plugin catalog once it is
-published, then add a `KWDB TSDB` data source.
+| Asset                                | Purpose                                                                         |
+| ------------------------------------ | ------------------------------------------------------------------------------- |
+| `kwdb-tsdb-datasource-<version>.zip` | The plugin: frontend bundle, backend binaries for Linux/macOS/Windows, manifest |
+| `...zip.sha1`                        | Digest, the value the Grafana plugin submission form asks for                   |
+| `...zip.sha256`                      | Stronger digest, for verifying the download                                     |
 
-### grafana-cli
+Releases are currently **unsigned**: the signing step in the release workflow is
+skipped because the repository has no `GRAFANA_ACCESS_POLICY_TOKEN`. Grafana
+refuses to load an unsigned plugin until its ID is on the unsigned-plugin allow
+list, so do step 1 before installing.
 
-When the plugin is published, install it from the command line:
+### 1. Allow the unsigned plugin
+
+The plugin ID is `kwdb-tsdb-datasource`. Add it to the allow list, using the
+option that matches how Grafana was installed:
+
+**DEB/RPM package (systemd)** — add to the environment file
+(`/etc/default/grafana-server` on Debian/Ubuntu,
+`/etc/sysconfig/grafana-server` on RHEL/Rocky; check with
+`systemctl cat grafana-server`):
+
+```bash
+GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=kwdb-tsdb-datasource
+```
+
+**Any install** — or set it in `/etc/grafana/grafana.ini`:
+
+```ini
+[plugins]
+allow_loading_unsigned_plugins = kwdb-tsdb-datasource
+```
+
+**Docker**:
+
+```bash
+docker run -d \
+  -e GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=kwdb-tsdb-datasource \
+  -p 3000:3000 grafana/grafana-enterprise:13.1.0
+```
+
+Restart Grafana after changing any of these.
+
+### 2. Install the plugin ZIP
+
+First download the archive for the version you want, and verify it. The
+commands below use `v1.4.1` as an example; substitute the version you are
+installing:
+
+```bash
+cd /tmp
+curl -LO https://github.com/KWDB/kwdb-grafana-plugin/releases/download/v1.4.1/kwdb-tsdb-datasource-1.4.1.zip
+curl -LO https://github.com/KWDB/kwdb-grafana-plugin/releases/download/v1.4.1/kwdb-tsdb-datasource-1.4.1.zip.sha256
+sha256sum -c kwdb-tsdb-datasource-1.4.1.zip.sha256
+```
+
+**Option A — `grafana-cli` from the release URL (recommended).** This is the
+supported path for a plugin that is not in the Grafana catalog yet; it handles
+the download, the checksum and the directory layout:
+
+```bash
+sudo grafana-cli plugins install 1.4.1 \
+  --pluginUrl https://github.com/KWDB/kwdb-grafana-plugin/releases/download/v1.4.1/kwdb-tsdb-datasource-1.4.1.zip
+```
+
+The version argument must match `info.version` inside the archive.
+
+**Option B — manual unzip** (offline machines). The default plugin directory is
+`/var/lib/grafana/plugins`; check `[paths] plugins` in `grafana.ini` if yours
+differs:
+
+```bash
+cd /var/lib/grafana/plugins
+sudo unzip -o /tmp/kwdb-tsdb-datasource-1.4.1.zip
+sudo chmod +x kwdb-tsdb-datasource/gpx_*
+```
+
+Two details decide whether Grafana finds the plugin at all:
+
+- The directory must be named exactly `kwdb-tsdb-datasource`, matching the
+  plugin ID. The archive already contains that top-level directory, so unpack it
+  into the plugin root, not into another folder of the same name.
+- The backend binary needs the execute bit; a zip copied across filesystems can
+  lose it.
+
+### 3. Restart Grafana
+
+```bash
+sudo systemctl restart grafana-server
+```
+
+### 4. Verify
+
+```bash
+sudo grafana-cli plugins ls
+sudo journalctl -u grafana-server -n 50 | grep -i plugin
+```
+
+No `unsigned` rejection or `plugin not found` in the log, and **KWDB TSDB**
+appears under **Connections > Data sources**. Then add the data source and click
+**Save & test** as described in [Configuration](#configuration).
+
+### Upgrading and uninstalling
+
+Remove the directory and install again — never overwrite a plugin directory in
+place:
+
+```bash
+sudo rm -rf /var/lib/grafana/plugins/kwdb-tsdb-datasource
+# reinstall, then restart
+sudo systemctl restart grafana-server
+```
+
+Uninstalling is the same command without the reinstall step.
+
+### Once the plugin is in the Grafana catalog
+
+After the plugin is published and signed, installation no longer needs the
+unsigned allow list and the steps above collapse to:
 
 ```bash
 grafana-cli plugins install kwdb-tsdb-datasource
+sudo systemctl restart grafana-server
 ```
 
-Restart Grafana after installation.
-
-### Manual ZIP installation
-
-1. Build and sign the plugin.
-2. Rename `dist` to `kwdb-tsdb-datasource`.
-3. Create a ZIP archive.
-4. Extract it into Grafana's plugin directory.
-5. Restart Grafana.
-
-See the
-[Grafana plugin packaging guide](https://grafana.com/developers/plugin-tools/publish-a-plugin/package-a-plugin).
+Until then, use the release ZIP with `allow_loading_unsigned_plugins` set.
 
 ### Local development environment
 
@@ -517,8 +621,11 @@ write.
 - To report a security vulnerability, follow [SECURITY.md](SECURITY.md) instead
   of opening a public issue.
 - Plugin ID: `kwdb-tsdb-datasource`
-- First submissions do not require a signature. After review, versions are
-  signed and released through the `Release` GitHub Actions workflow.
+- Releases published today are **unsigned** (the workflow's signing step is
+  skipped without `GRAFANA_ACCESS_POLICY_TOKEN`), so users must add the ID to
+  `allow_loading_unsigned_plugins` — see [Installation](#installation). Once a
+  Grafana signature exists, releases become signed and the allow list is no
+  longer needed.
 - Full publishing instructions:
   [Grafana plugin publishing guide](https://grafana.com/developers/plugin-tools/publish-a-plugin)
 
