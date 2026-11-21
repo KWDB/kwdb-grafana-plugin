@@ -916,10 +916,10 @@
     micro-memoize "^4.1.2"
     react-i18next "^17.0.9"
 
-"@grafana/plugin-e2e@^3.15.4":
-  version "3.15.4"
-  resolved "https://registry.yarnpkg.com/@grafana/plugin-e2e/-/plugin-e2e-3.15.4.tgz#102c8289c08da0c5582ddfff0af5e6877f85cdb1"
-  integrity sha512-NC/AA3lajw6OLvi26TMSOkkaOl8uP+Ax5eiRmraZdUbaDKF0FLxBwuKz2qgYCbK7PrWuDoIHrBJ3n1VMGmyjMw==
+"@grafana/plugin-e2e@^4.1.0":
+  version "4.1.0"
+  resolved "https://registry.yarnpkg.com/@grafana/plugin-e2e/-/plugin-e2e-4.1.0.tgz#c6a835cc9de2c583f087faffe834b1522b748c5a"
+  integrity sha512-nvGAmGRPfttnm8NAf3NzgiFx7xjJPBOG6mlgj5r2gFDOx3fm5/xEXZiNebsroZx0TO83qAaWdmmPKFE4UF9GpQ==
   dependencies:
     yaml "^2.3.4"
 
@@ -3229,7 +3229,7 @@ baseline-browser-mapping@^2.10.44:
   resolved "https://registry.npmmirror.com/baseline-browser-mapping/-/baseline-browser-mapping-2.11.12.tgz#42ac48770bf73d292f60ce8ba4dc5e7ebb242ec3"
   integrity sha512-r7WnVImvVCeFpf2DOXfy41aPWzeNg3H/A2X4dKmy1QL0MSyyk/e7z8ihJ3N6Nn2PsdhkVlqnEfnUE4a05P2aTA==
 
-basic-ftp@^6.2.3:
+basic-ftp@^6.2.6:
   version "6.2.6"
   resolved "https://registry.yarnpkg.com/basic-ftp/-/basic-ftp-6.2.6.tgz#84905c94db0e10415c9ba4ce61b30bc38875905a"
   integrity sha512-0EjZCaodOz6yiokv2JA1VyKGNdGxULZ+GGlPgG9tm4d+T/bHtX1hUch8CumDneBfpIbiSdn7TaCGwpM+gwsOlw==
