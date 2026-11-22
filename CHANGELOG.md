@@ -1,15 +1,6 @@
 # Changelog
 
-## Unreleased
-
-### Changed
-
-- Installation documentation now describes the real path for an unsigned
-  release: allow the plugin ID via `allow_loading_unsigned_plugins`, install the
-  release ZIP (preferably `grafana-cli plugins install <version> --pluginUrl
-<release zip>`), then restart and verify. Both `README.md` and the packaged
-  `src/README.md` are updated; the previous instructions assumed a signed
-  catalog publication and a local build.
+## v1.5.0 (2026-11-19)
 
 ### Added
 
@@ -20,6 +11,30 @@
   resource returns their values. See #79.
 - Browser regression coverage saves temporary dashboards and verifies template
   variables and Ad Hoc filters on the actual panel request path.
+- The downsampling **Interval** control gained an `Auto` mode (`$__interval`,
+  `$__interval_ms`) plus a picker for the current dashboard's variables, so a
+  single dashboard control drives the bucket size of every builder panel. The
+  data source configuration form was reworked to group the interval controls
+  with the connection fields. See #82.
+- Backend and plugin logic are covered by tests over adversarial data shapes
+  and edge cases. See #87.
+- Published GitHub releases are mirrored to the Gitee repository
+  (`gitee.com/kwdb/kwdb-grafana-plugin`) with the same tag, title, notes and
+  assets. See #102.
+
+### Changed
+
+- Installation documentation now describes the real path for an unsigned
+  release: allow the plugin ID via `allow_loading_unsigned_plugins`, install the
+  release ZIP (preferably `grafana-cli plugins install <version> --pluginUrl
+<release zip>`), then restart and verify. Both `README.md` and the packaged
+  `src/README.md` are updated; the previous instructions assumed a signed
+  catalog publication and a local build.
+- The toolchain moved to Node 24 and `@grafana/sign-plugin` 4. See #70, #71.
+- The repository is Prettier-formatted with the check enforced in CI (#86), and
+  the backend is `gofmt`-clean with the check enforced in CI (#91).
+- Documentation statements that no longer matched the code were corrected. See
+  #72.
 
 ### Fixed
 
@@ -30,19 +45,40 @@
   custom `All` value is inserted unchanged, matching Grafana's SQL data sources.
   See #78.
 
-### Known limitations
-
-- Raw SQL Ad Hoc filters are only supported for statements with a single
-  top-level source table; joins, `FROM` subqueries, `UNION` and `SHOW`/`EXPLAIN`
-  report an error instead of running unfiltered.
-
-### Fixed
-
 - A dashboard Ad Hoc filter is applied only to the panel targets whose own table
   declares the filtered column. Previously the request-level filter list was
   injected into every target, so a dashboard mixing tables failed on targets
   missing that column. Targets without the column now run unfiltered instead of
   erroring. See #80.
+- Latest-value queries over an empty time range return no data instead of
+  failing. See #85.
+- Gitee release mirroring: `target_commitish` is passed on create (#103),
+  attachment uploads are bounded and small files are mirrored first (#104), and
+  `tag_name` is sent on the release `PATCH` (#105).
+
+### Dependencies and security
+
+- Go directive bumped to 1.26.11, clearing GO-2026-6859. See #101.
+- `klauspost/compress` updated, clearing GO-2026-6865. See #92.
+- `basic-ftp` bumped from 6.2.3 to 6.2.6. See #100.
+- `github.com/jackc/pgx/v5` bumped from 5.11.0 to 5.12.0 (#88), plus the Grafana
+  frontend package group (#75), `@grafana/plugin-e2e` 3.15.3, webpack-cli 7, the
+  eslint group, sass-loader, `@swc/core`, glob, `@types/node` and
+  diagnostics-webpack-plugin.
+
+### Known limitations
+
+- Raw SQL Ad Hoc filters are only supported for statements with a single
+  top-level source table; joins, `FROM` subqueries, `UNION` and `SHOW`/`EXPLAIN`
+  report an error instead of running unfiltered.
+- Alerting rules work end to end but are not covered by an automated test;
+  prefer a read-only account when enabling alerting.
+
+> **Release artifacts are unsigned.** `GRAFANA_ACCESS_POLICY_TOKEN` is not
+> configured for this repository, so the release workflow skips signing. Add
+> `kwdb-tsdb-datasource` to `allow_loading_unsigned_plugins` (or set
+> `GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS`) before installing; see
+> [Installation](README.md#installation).
 
 ## v1.4.1 (2026-10-29)
 
