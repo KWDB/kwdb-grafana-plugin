@@ -121,9 +121,24 @@ jobs:
           echo "SHA256: ${SHA256}"
 
       - name: Validate plugin
+        # The validator resolves the Grafana Go SDK version against the GitHub
+        # API, and that unauthenticated call is rate limited on shared runners:
+        # the v1.5.0 run failed here with "Could not verify your Grafana Go SDK
+        # version" while an identical SDK version had passed for v1.4.1, and the
+        # re-run passed. Retrying costs nothing for a real finding, which
+        # reproduces on every attempt.
         run: |
-          npx --yes @grafana/plugin-validator@0.50.0 \
-            -sourceCodeUri file://./ "${{ steps.package.outputs.archive }}"
+          set -uo pipefail
+          for attempt in 1 2 3; do
+            if npx --yes @grafana/plugin-validator@0.50.0 \
+              -sourceCodeUri file://./ "${{ steps.package.outputs.archive }}"; then
+              exit 0
+            fi
+            echo "::warning::plugin-validator failed on attempt ${attempt}; retrying in 60s"
+            sleep 60
+          done
+          echo "::error::plugin-validator failed after 3 attempts"
+          exit 1
 
       - name: Build release notes
         run: |

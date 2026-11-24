@@ -24,9 +24,14 @@ Usage:
                         --gitee-owner <owner> --gitee-repo <repo>
 
 Environment:
-  GITEE_TOKEN          Gitee personal access token (projects scope)
-  GITEE_ACCESS_TOKEN   Alternative name for the same token
-  GITEE_MAX_ASSET_MB   Skip assets larger than this many MB (default: 100)
+  GITEE_TOKEN              Gitee personal access token (projects scope)
+  GITEE_ACCESS_TOKEN       Alternative name for the same token
+  GITEE_MAX_ASSET_MB       Skip assets larger than this many MB (default: 100)
+  GITEE_UPLOAD_MAX_SECONDS Per-attempt curl ceiling for one asset (default: 3600)
+  GITEE_UPLOAD_ATTEMPTS    Attempts per asset before giving up (default: 3)
+  GITEE_UPLOAD_SPEED_TIME  Seconds below GITEE_UPLOAD_SPEED_LIMIT that abort an
+                           attempt (default: 300)
+  GITEE_UPLOAD_SPEED_LIMIT Bytes/second floor for the stall check (default: 2048)
 
 Parameters:
   --tag                Release tag to sync, e.g. v1.4.1
@@ -79,6 +84,18 @@ TOKEN="${TOKEN_ARG:-${GITEE_TOKEN:-${GITEE_ACCESS_TOKEN:-}}}"
 [[ -n "$TOKEN" ]] || die "a Gitee token is required (--gitee-token or GITEE_TOKEN/GITEE_ACCESS_TOKEN)"
 
 MAX_ASSET_MB="${GITEE_MAX_ASSET_MB:-100}"
+
+# The plugin archive carries every platform's backend binary and is ~64 MB.
+# Uploading it from an overseas GitHub runner to Gitee runs close to half an
+# hour: v1.4.1 completed in 30m02s against a 30m00s ceiling, and the two v1.5.0
+# attempts were killed by curl (28) at exactly 1800s with no bytes received.
+# The ceiling therefore has to sit well above the observed transfer time, and a
+# stalled attempt needs more than one try. GitHub Actions allows six hours per
+# job, so a one-hour ceiling per attempt still leaves room for three attempts.
+UPLOAD_MAX_SECONDS="${GITEE_UPLOAD_MAX_SECONDS:-3600}"
+UPLOAD_ATTEMPTS="${GITEE_UPLOAD_ATTEMPTS:-3}"
+UPLOAD_SPEED_TIME="${GITEE_UPLOAD_SPEED_TIME:-300}"
+UPLOAD_SPEED_LIMIT="${GITEE_UPLOAD_SPEED_LIMIT:-2048}"
 
 API="https://gitee.com/api/v5"
 TOKEN_Q="access_token=$(printf '%s' "$TOKEN" | jq -sRr @uri)"
@@ -263,12 +280,13 @@ for file in ${upload_list[@]+"${upload_list[@]}"}; do
   attempt=1
   upload_code=""
   upload_body=""
-  while (( attempt <= 2 )); do
+  while (( attempt <= UPLOAD_ATTEMPTS )); do
     # --speed-limit/--speed-time abort a connection that trickles or stalls
     # instead of hanging the job; --max-time is the hard ceiling. `Expect:`
     # disables curl's 100-continue wait, which some servers never answer.
-    upload_resp="$(curl -sS --connect-timeout 30 --speed-limit 2048 --speed-time 120 \
-      --max-time 1800 -H 'Expect:' -w $'\n%{http_code}' \
+    upload_resp="$(curl -sS --connect-timeout 30 --speed-limit "${UPLOAD_SPEED_LIMIT}" \
+      --speed-time "${UPLOAD_SPEED_TIME}" \
+      --max-time "${UPLOAD_MAX_SECONDS}" -H 'Expect:' -w $'\n%{http_code}' \
       -X POST "${API}/repos/${GITEE_OWNER}/${GITEE_REPO}/releases/${release_id}/attach_files?${TOKEN_Q}" \
       -F "file=@${file}")"
     upload_code="${upload_resp##*$'\n'}"
@@ -276,11 +294,11 @@ for file in ${upload_list[@]+"${upload_list[@]}"}; do
     if [[ "$upload_code" == 2* ]]; then
       break
     fi
-    echo "[gitee-sync] WARNING: ${filename} attempt ${attempt} failed (HTTP ${upload_code}: ${upload_body})" >&2
+    echo "[gitee-sync] WARNING: ${filename} attempt ${attempt}/${UPLOAD_ATTEMPTS} failed (HTTP ${upload_code}: ${upload_body})" >&2
     attempt=$(( attempt + 1 ))
-    (( attempt <= 2 )) && sleep 10
+    (( attempt <= UPLOAD_ATTEMPTS )) && sleep 30
   done
-  [[ "$upload_code" == 2* ]] || die "failed to upload ${filename} after 2 attempts: HTTP ${upload_code} ${upload_body}"
+  [[ "$upload_code" == 2* ]] || die "failed to upload ${filename} after ${UPLOAD_ATTEMPTS} attempts: HTTP ${upload_code} ${upload_body}"
   if (( size_mb >= 1 )); then
     log "${filename}: uploaded (${size_mb} MB)"
   else
